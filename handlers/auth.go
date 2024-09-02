@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // OTP validity duration
@@ -26,14 +27,12 @@ func generateOTP() string {
     return string(otp)
 }
 
-// sendOTPEmail sends the OTP to the user's email
 func sendOTPEmail(email string, otp string) {
-    // Implement email sending logic here
+    utils.SendOTPEmail(email, otp)
 }
 
-// sendOTPWhatsApp sends the OTP to the user's phone number
 func sendOTPWhatsApp(phoneNumber string, otp string) {
-    // Implement WhatsApp sending logic here
+    utils.SendOTPWhatsApp(phoneNumber, otp)
 }
 
 // Login handles user login requests
@@ -48,26 +47,22 @@ func Login(c *gin.Context) {
         return
     }
 
-    var user models.User
-    // Find user by customer number and either email or phone
-    if err := utils.CustomerPortalDB.Where("customer_number = ? AND (email = ? OR phone_number = ?)", input.CustomerNumber, input.EmailOrPhone, input.EmailOrPhone).First(&user).Error; err != nil {
+    var customer models.Customer
+    // Use CRMDB to find the customer by customer number and either email or phone
+    if err := utils.CRMDB.Where("customer_no = ? AND (primary_email = ? OR phone = ?)", input.CustomerNumber, input.EmailOrPhone, input.EmailOrPhone).First(&customer).Error; err != nil {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid customer number or contact information"})
         return
     }
 
-    // Generate and send OTP
     otp := generateOTP()
-    user.OTP = otp
-    user.OTPGeneratedAt = time.Now()
+    customer.OTP = otp
+    customer.OTPGeneratedAt = time.Now().Format("2006-01-02 15:04:05") // Convert time.Time to string
 
-    if input.EmailOrPhone == user.Email {
-        sendOTPEmail(user.Email, otp)
-    } else if input.EmailOrPhone == user.PhoneNumber {
-        sendOTPWhatsApp(user.PhoneNumber, otp)
+    if input.EmailOrPhone == customer.PrimaryEmail {
+        sendOTPEmail(customer.PrimaryEmail, otp)
+    } else if input.EmailOrPhone == customer.Phone {
+        sendOTPWhatsApp(customer.Phone, otp)
     }
-
-    // Save OTP in the user struct (not in DB, to avoid security risks)
-    utils.CustomerPortalDB.Save(&user)
 
     c.JSON(http.StatusOK, gin.H{"message": "OTP sent", "otp_sent": true})
 }
@@ -86,9 +81,49 @@ func VerifyOTP(c *gin.Context) {
     }
 
     var user models.User
-    if err := utils.CustomerPortalDB.Where("customer_number = ?", input.CustomerNumber).First(&user).Error; err != nil {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid customer number"})
-        return
+    // Check if the user exists in the users table
+    err := utils.CustomerPortalDB.Where("customer_number = ?", input.CustomerNumber).First(&user).Error
+    if err != nil {
+        if err == gorm.ErrRecordNotFound {
+            // Fetch email and phone from the customer table in CRM
+            var customer models.Customer
+            if err := utils.CRMDB.Where("customer_no = ?", input.CustomerNumber).First(&customer).Error; err != nil {
+                c.JSON(http.StatusUnauthorized, gin.H{"error": "Customer not found in CRM database"})
+                return
+            }
+
+            // If user does not exist, create a new user record
+            user = models.User{
+                CustomerNumber: input.CustomerNumber,
+                Email:          customer.PrimaryEmail,
+                PhoneNumber:    customer.Phone,
+                Verified:       false,
+                UserType:       "individual", // Adjust based on your business logic
+                InitialSetup:   false,
+            }
+
+            // Set GroupID to NULL or find an existing group
+            user.GroupID = 0 // Set appropriately if needed; otherwise, allow it to be NULL
+            if user.UserType == "group" {
+                // Handle group association if the user type is 'group'
+                var group models.Group
+                if err := utils.CustomerPortalDB.First(&group).Error; err == nil {
+                    user.GroupID = group.ID
+                } else {
+                    c.JSON(http.StatusBadRequest, gin.H{"error": "No valid group found for group user"})
+                    return
+                }
+            }
+
+            // Create the new user record
+            if err := utils.CustomerPortalDB.Create(&user).Error; err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user in the database"})
+                return
+            }
+        } else {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid customer number"})
+            return
+        }
     }
 
     // Check OTP validity
@@ -104,10 +139,16 @@ func VerifyOTP(c *gin.Context) {
         return
     }
 
+    // Update the user details
     user.Password = string(hashedPassword)
     user.Verified = true
     user.InitialSetup = true
-    utils.CustomerPortalDB.Save(&user)
+
+    // Save the updated user in the users table
+    if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user in the database"})
+        return
+    }
 
     c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
 }
