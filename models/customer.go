@@ -7,7 +7,7 @@ type Customer struct {
     NationalID         string `gorm:"column:national_id"`
     PassportNo         string `gorm:"column:passport_no"`
     KRAPin             string `gorm:"column:kra_pin"`
-    DOB                string `gorm:"column:dob"`  // Change to string to match VARCHAR type
+    DOB                string `gorm:"column:dob"`
     Gender             string `gorm:"column:gender"`
     MaritalStatus      string `gorm:"column:marital_status"`
     Phone              string `gorm:"column:phone"`
@@ -16,10 +16,10 @@ type Customer struct {
     Address            string `gorm:"column:address"`
     CustomerType       string `gorm:"column:customer_type"`
     LeadSource         string `gorm:"column:lead_source"`
-    SubCatID           string `gorm:"column:sub_cat_id"` // Changed to string
+    SubCatID           string `gorm:"column:sub_cat_id"`
     Marketer           string `gorm:"column:marketer"`
     CountryOfResidence string `gorm:"column:country_of_residence"`
-    DateOfRegistration string `gorm:"column:date_of_registration"` // Change to string to match VARCHAR type
+    DateOfRegistration string `gorm:"column:date_of_registration"`
     AlternativePhone   string `gorm:"column:alternative_phone"`
     OTP                string `gorm:"-"` // Not stored in DB
     OTPGeneratedAt     string `gorm:"-"` // Not stored in DB

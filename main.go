@@ -20,7 +20,7 @@ func main() {
     r := gin.Default()
     utils.ConnectDatabase()
 
-    r.POST("/login", handlers.Login)
+    r.POST("/verify-user", handlers.VerifyUser)
     r.POST("/reset-password", handlers.ResetPassword)
     r.POST("/verify-otp", handlers.VerifyOTP)
 

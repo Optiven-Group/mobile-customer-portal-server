@@ -35,8 +35,8 @@ func sendOTPWhatsApp(phoneNumber string, otp string) {
     utils.SendOTPWhatsApp(phoneNumber, otp)
 }
 
-// Login handles user login requests
-func Login(c *gin.Context) {
+// Verify user and send OTP
+func VerifyUser(c *gin.Context) {
     var input struct {
         CustomerNumber string `json:"customer_number"`
         EmailOrPhone   string `json:"email_or_phone"`
