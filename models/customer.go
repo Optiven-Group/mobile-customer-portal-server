@@ -21,8 +21,8 @@ type Customer struct {
     CountryOfResidence string `gorm:"column:country_of_residence"`
     DateOfRegistration string `gorm:"column:date_of_registration"`
     AlternativePhone   string `gorm:"column:alternative_phone"`
-    OTP                string `gorm:"-"` // Not stored in DB
-    OTPGeneratedAt     string `gorm:"-"` // Not stored in DB
+    OTP                string `gorm:"column:otp"`
+    OTPGeneratedAt     string `gorm:"column:otp_generated_at"`
 }
 
 // TableName overrides the default table name to "customer"

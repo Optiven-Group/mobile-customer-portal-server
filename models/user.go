@@ -15,10 +15,10 @@ type User struct {
     OTP            string `gorm:"-"`
     NewPassword    string `gorm:"-"`
     Verified       bool   `gorm:"default:false"`
-    UserType       string `gorm:"not null"` // "individual" or "group"
-    GroupID        uint
+    UserType       string `gorm:"not null"`
+    GroupID        *uint
     Group          Group
     InitialSetup   bool      `gorm:"default:false"`
-    OTPExpiresAt   time.Time `gorm:"-"`  // Track OTP expiry time, not stored in DB
-    OTPGeneratedAt time.Time `gorm:"-"`  // Track when OTP was generated, not stored in DB
+    OTPExpiresAt   time.Time `gorm:"-"`
+    OTPGeneratedAt time.Time `gorm:"-"`
 }
