@@ -9,9 +9,9 @@ import (
 type User struct {
     gorm.Model
     CustomerNumber string `gorm:"unique;not null"`
-    Email          string
+    Email          string `gorm:"unique;not null"`
     PhoneNumber    string
-    Password       string
+    Password       string `gorm:"not null"`
     OTP            string `gorm:"-"`
     NewPassword    string `gorm:"-"`
     Verified       bool   `gorm:"default:false"`

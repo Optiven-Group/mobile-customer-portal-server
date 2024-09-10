@@ -12,22 +12,26 @@ import (
 )
 
 func main() {
-    err := godotenv.Load()
-    if err != nil {
-        log.Fatalf("Error loading .env file")
-    }
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
 
-    r := gin.Default()
-    utils.ConnectDatabase()
+	r := gin.Default()
+	utils.ConnectDatabase()
 
-    r.POST("/verify-user", handlers.VerifyUser)
-    r.POST("/reset-password", handlers.ResetPassword)
-    r.POST("/verify-otp", handlers.VerifyOTP)
+	// Define the routes
+	r.POST("/verify-user", handlers.VerifyUser)      // Verifies user and sends OTP
+	r.POST("/request-otp", handlers.RequestOTP)      // Requests an OTP for password reset
+	r.POST("/reset-password", handlers.ResetPassword) // Verifies OTP and sets new password
+	r.POST("/verify-otp", handlers.VerifyOTP)        // Verifies OTP for user creation
 
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080"
-    }
+	// Set the port
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
-    r.Run(":" + port) // listen and serve on 0.0.0.0:8080
+	// Run the server
+	r.Run(":" + port) // listen and serve on 0.0.0.0:8080
 }
