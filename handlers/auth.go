@@ -169,26 +169,26 @@ func VerifyOTP(c *gin.Context) {
 // RequestOTP handles password reset requests by generating and sending a new OTP via email
 func RequestOTP(c *gin.Context) {
 	var input struct {
-		Email string `json:"email"`
+			Email string `json:"email"`
 	}
 
 	// Validate the input data
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data. Please provide a valid email address."})
-		return
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data. Please provide a valid email address."})
+			return
 	}
 
 	// Check if the email is provided
 	if input.Email == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Email address is required."})
-		return
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Email address is required."})
+			return
 	}
 
 	var user models.User
 	// Check if the user exists in the customer-portal database by email
 	if err := utils.CustomerPortalDB.Where("email = ?", input.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found. Please check your email address."})
-		return
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found. Please check your email address."})
+			return
 	}
 
 	// Generate a new OTP
@@ -201,9 +201,9 @@ func RequestOTP(c *gin.Context) {
 
 	// Save the user with the new OTP data
 	if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
-		log.Printf("Failed to update user with new OTP: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "We encountered an issue saving the OTP. Please try again later."})
-		return
+			log.Printf("Failed to update user with new OTP: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "We encountered an issue saving the OTP. Please try again later."})
+			return
 	}
 
 	// Send the OTP via email
@@ -216,28 +216,28 @@ func RequestOTP(c *gin.Context) {
 // ResetPassword handles the password reset after verifying the OTP
 func ResetPassword(c *gin.Context) {
 	var input struct {
-		Email       string `json:"email"`
-		OTP         string `json:"otp"`
-		NewPassword string `json:"new_password"`
+			Email       string `json:"email"`
+			OTP         string `json:"otp"`
+			NewPassword string `json:"new_password"`
 	}
 
 	// Validate the input data
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data. Please ensure all required fields are filled correctly."})
-		return
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data. Please ensure all required fields are filled correctly."})
+			return
 	}
 
 	// Check if all required fields are provided
 	if input.Email == "" || input.OTP == "" || input.NewPassword == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Email, OTP, and new password are required."})
-		return
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Email, OTP, and new password are required."})
+			return
 	}
 
 	var user models.User
 	// Check if the user exists in the customer-portal database by email
 	if err := utils.CustomerPortalDB.Where("email = ?", input.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found. Please check your email address."})
-		return
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found. Please check your email address."})
+			return
 	}
 
 	// Log retrieved OTP and its generated timestamp
@@ -245,50 +245,43 @@ func ResetPassword(c *gin.Context) {
 
 	// Ensure OTP and OTPGeneratedAt are correctly populated
 	if user.OTP == "" || user.OTPGeneratedAt.IsZero() {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "The OTP is missing or not properly set. Please request a new OTP."})
-		return
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "The OTP is missing or not properly set. Please request a new OTP."})
+			return
 	}
 
-	// Parse the OTP generation time using the correct format
-	otpGeneratedAt, err := time.Parse(time.RFC3339, user.OTPGeneratedAt.Format(time.RFC3339))
-	if err != nil {
-		log.Printf("Error parsing OTPGeneratedAt: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "There was an error verifying your OTP. Please request a new one."})
-		return
-	}
-
-	// Log parsed OTP generation time for debugging
-	log.Printf("Parsed OTP generated at: %v", otpGeneratedAt)
-
-	// Verify OTP and check expiration
+	// Check OTP validity
 	if input.OTP != user.OTP {
-		log.Printf("OTP mismatch: received %s, expected %s", input.OTP, user.OTP)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "The OTP is incorrect. Please try again or request a new one."})
-		return
+			log.Printf("OTP mismatch: received %s, expected %s", input.OTP, user.OTP)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "The OTP is incorrect. Please try again or request a new one."})
+			return
 	}
 
-	if time.Now().After(otpGeneratedAt.Add(otpValidityDuration)) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "The OTP has expired. Please request a new OTP."})
-		return
+	if time.Since(user.OTPGeneratedAt) > otpValidityDuration {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "The OTP has expired. Please request a new OTP."})
+			return
 	}
 
 	// Hash the new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "An error occurred while processing your password. Please try again."})
-		return
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "An error occurred while processing your password. Please try again."})
+			return
 	}
 
 	// Update the user's password in the database
 	user.Password = string(hashedPassword)
-	user.OTP = ""                       // Clear the OTP
-	user.OTPGeneratedAt = time.Time{}   // Clear OTP generation time
+	user.OTP = ""                     // Clear the OTP
+	user.OTPGeneratedAt = time.Time{} // Clear OTP generation time
 
-	// Save the updated user data to the database
-	if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
-		log.Printf("Failed to update user password in the database: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "We encountered an issue updating your password. Please try again later."})
-		return
+	// Set OTPGeneratedAt to NULL instead of a zero value
+	if err := utils.CustomerPortalDB.Model(&user).Updates(map[string]interface{}{
+			"password":          user.Password,
+			"otp":               nil,
+			"otp_generated_at":  nil, // Ensure we are setting this to NULL
+	}).Error; err != nil {
+			log.Printf("Failed to update user password in the database: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "We encountered an issue updating your password. Please try again later."})
+			return
 	}
 
 	// Inform the user that the password has been reset successfully
