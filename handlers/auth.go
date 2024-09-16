@@ -44,9 +44,16 @@ func VerifyUser(c *gin.Context) {
 		return
 	}
 
+	// Ensure that CustomerNumber and EmailOrPhone are not empty
+	if input.CustomerNumber == "" || input.EmailOrPhone == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Customer number and email/phone are required."})
+		return
+	}
+
 	var customer models.Customer
 	// Find the customer by customer number, email or phone, and ensure customer_type is "Individual"
 	if err := utils.CRMDB.Where("customer_no = ? AND (primary_email = ? OR phone = ?) AND customer_type = ?", input.CustomerNumber, input.EmailOrPhone, input.EmailOrPhone, "Individual").First(&customer).Error; err != nil {
+		log.Printf("Customer not found: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "No matching individual customer found. Please verify your details or contact support if you are not an individual customer."})
 		return
 	}

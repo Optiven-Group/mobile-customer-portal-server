@@ -3,12 +3,14 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"mobile-customer-portal-server/handlers"
 	"mobile-customer-portal-server/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/gin-contrib/cors"
 )
 
 func main() {
@@ -18,6 +20,17 @@ func main() {
 	}
 
 	r := gin.Default()
+
+	// Setup CORS
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"}, 
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
 	utils.ConnectDatabase()
 
 	// Define the routes
