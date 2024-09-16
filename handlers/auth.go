@@ -6,9 +6,11 @@ import (
 	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -56,8 +58,31 @@ func Login(c *gin.Context) {
         return
     }
 
-    // For simplicity, return a success message
-    c.JSON(http.StatusOK, gin.H{"message": "Login successful."})
+    // Retrieve the JWT secret from the environment variable and convert it to []byte
+    jwtSecret := []byte(os.Getenv("JWT_SECRET"))
+    if len(jwtSecret) == 0 {
+        log.Println("JWT secret is not set or empty")
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+        return
+    }
+
+    // Generate JWT token
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+        "user_id": user.ID,
+        "exp":     time.Now().Add(time.Hour * 72).Unix(), // Token expires in 72 hours
+    })
+
+    tokenString, err := token.SignedString(jwtSecret)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
+        return
+    }
+
+    // Return the token in the response
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Login successful.",
+        "token":   tokenString,
+    })
 }
 
 // VerifyUser checks if the customer exists and sends an OTP for verification
