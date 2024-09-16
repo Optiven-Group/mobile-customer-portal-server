@@ -13,7 +13,7 @@ type User struct {
     PhoneNumber    string
     Password       string    `gorm:"not null"`
     OTP            string    `gorm:"column:otp"`
-    OTPGeneratedAt time.Time `gorm:"column:otp_generated_at"`
+    OTPGeneratedAt *time.Time `gorm:"column:otp_generated_at"`
     Verified       bool      `gorm:"default:false"`
     UserType       string    `gorm:"not null"`
     GroupID        *uint
