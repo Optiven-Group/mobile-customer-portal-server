@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"mobile-customer-portal-server/handlers"
+	"mobile-customer-portal-server/handlers/auth"
 	"mobile-customer-portal-server/utils"
 
 	"github.com/gin-contrib/cors"
@@ -13,11 +13,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func main() {
-    err := godotenv.Load()
-    if err != nil {
-        log.Fatalf("Error loading .env file")
+func init() {
+    // Load the .env file
+    if err := godotenv.Load(); err != nil {
+        log.Fatal("Error loading .env file")
     }
+}
+
+func main() {
 
     r := gin.Default()
 
@@ -34,13 +37,15 @@ func main() {
     utils.ConnectDatabase()
 
     // Define the routes
-    r.POST("/login", handlers.Login)
-    r.POST("/verify-user", handlers.VerifyUser)
-    r.POST("/verify-otp", handlers.VerifyOTP)
-    r.POST("/complete-registration", handlers.CompleteRegistration)
-    r.POST("/request-otp", handlers.RequestOTP)
-    r.POST("/verify-otp-reset", handlers.VerifyOTPReset)
-    r.POST("/reset-password", handlers.ResetPassword)
+    r.POST("/login", auth.Login)
+    r.POST("/logout", auth.Logout) // Add the logout route
+
+    r.POST("/verify-user", auth.VerifyUser)
+    r.POST("/verify-otp", auth.VerifyOTP)
+    r.POST("/complete-registration", auth.CompleteRegistration)
+    r.POST("/request-otp", auth.RequestOTP)
+    r.POST("/verify-otp-reset", auth.VerifyOTPReset)
+    r.POST("/reset-password", auth.ResetPassword)
 
     // Set the port
     port := os.Getenv("PORT")

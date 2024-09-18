@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // Customer struct to map the fields in the customer table in the CRM database
 type Customer struct {
     CustomerNo         string `gorm:"column:customer_no;primaryKey"`
@@ -22,7 +24,7 @@ type Customer struct {
     DateOfRegistration string `gorm:"column:date_of_registration"`
     AlternativePhone   string `gorm:"column:alternative_phone"`
     OTP                string `gorm:"column:otp"`
-    OTPGeneratedAt     string `gorm:"column:otp_generated_at"`
+    OTPGeneratedAt     *time.Time `gorm:"column:otp_generated_at"`
 }
 
 // TableName overrides the default table name to "customer"
