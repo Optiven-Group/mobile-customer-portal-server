@@ -65,7 +65,7 @@ func ConnectDatabase() {
     }
 
     // Automatically migrate the schema for the User and Group models to the customer portal database
-    CustomerPortalDB.AutoMigrate(&models.User{}, &models.Group{})
+    CustomerPortalDB.AutoMigrate(&models.PasswordReset{})
 
     log.Println("Successfully connected to all databases")
 }

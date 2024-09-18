@@ -193,8 +193,7 @@ func CompleteRegistration(c *gin.Context) {
 			Email:          input.Email,
 			PhoneNumber:    customer.Phone,
 			Verified:       true,
-			UserType:       "individual", // Placeholder for future group or company types
-			InitialSetup:   true,
+			UserType:       "individual",
 	}
 
 	// Hash the new password
