@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"mobile-customer-portal-server/handlers/auth"
+	"mobile-customer-portal-server/handlers/properties"
 	"mobile-customer-portal-server/utils"
 
 	"github.com/gin-contrib/cors"
@@ -36,9 +37,9 @@ func main() {
 
     utils.ConnectDatabase()
 
-    // Define the routes
+    // Public routes
     r.POST("/login", auth.Login)
-    r.POST("/logout", auth.Logout) // Add the logout route
+    r.POST("/logout", auth.Logout)
 
     r.POST("/verify-user", auth.VerifyUser)
     r.POST("/verify-otp", auth.VerifyOTP)
@@ -46,6 +47,14 @@ func main() {
     r.POST("/request-otp", auth.RequestOTP)
     r.POST("/verify-otp-reset", auth.VerifyOTPReset)
     r.POST("/reset-password", auth.ResetPassword)
+
+    // Protected routes
+    protected := r.Group("/")
+    protected.Use(auth.AuthMiddleware())
+    {
+        protected.GET("/properties", properties.GetProperties)
+        protected.GET("/properties/:lead_file_no/installment-schedule", properties.GetInstallmentSchedule)
+    }
 
     // Set the port
     port := os.Getenv("PORT")

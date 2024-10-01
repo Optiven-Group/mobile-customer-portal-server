@@ -64,8 +64,10 @@ func ConnectDatabase() {
         log.Fatalf("Failed to connect to CRM database: %v", err)
     }
 
-    // Automatically migrate the schema for the User and Group models to the customer portal database
+    // Automatically migrate the schema for the PasswordReset model to the customer portal database
     CustomerPortalDB.AutoMigrate(&models.PasswordReset{})
+
+    // No need to migrate CRMDB models since we're only reading existing tables
 
     log.Println("Successfully connected to all databases")
 }
