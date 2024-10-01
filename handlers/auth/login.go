@@ -11,7 +11,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Login handles user authentication
 func Login(c *gin.Context) {
     var input struct {
         Email    string `json:"email"`
@@ -35,6 +34,13 @@ func Login(c *gin.Context) {
         return
     }
 
+    // Fetch CustomerName from CRM database using CustomerNumber
+    var customer models.Customer
+    if err := utils.CRMDB.Where("customer_no = ?", user.CustomerNumber).First(&customer).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve customer information."})
+        return
+    }
+
     // Generate JWT token
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
         "user_id": user.ID,
@@ -47,12 +53,18 @@ func Login(c *gin.Context) {
         return
     }
 
-    // Return the token in the response
+    // Return the token and user data in the response
     c.JSON(http.StatusOK, gin.H{
         "message": "Login successful.",
         "token":   tokenString,
+        "user": gin.H{
+            "id":             user.ID,
+            "email":          user.Email,
+            "name":           customer.CustomerName,
+        },
     })
 }
+
 
 // Logout handles user sign-out
 func Logout(c *gin.Context) {
