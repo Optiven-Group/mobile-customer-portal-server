@@ -54,6 +54,7 @@ func main() {
     {
         protected.GET("/properties", properties.GetProperties)
         protected.GET("/properties/:lead_file_no/installment-schedule", properties.GetInstallmentSchedule)
+        protected.GET("/properties/:lead_file_no/transactions", properties.GetTransactions)
     }
 
     // Set the port
