@@ -15,7 +15,7 @@ type InstallmentSchedule struct {
     PlotNo            string     `gorm:"column:plot_No" json:"plot_no"`
     PlotName          string     `gorm:"column:plot_Name" json:"plot_name"`
     AmountPaid        string     `gorm:"column:amount_Paid" json:"amount_paid"`
-    PenatiesAccrued   int        `gorm:"column:penaties_Accrued" json:"penalties_accrued"`
+    PenaltiesAccrued  int        `gorm:"column:penalties_accrued" json:"penalties_accrued"`
 }
 
 // TableName to override the default table name

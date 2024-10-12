@@ -54,6 +54,7 @@ func main() {
     {
         protected.GET("/properties", properties.GetProperties)
         protected.GET("/properties/:lead_file_no/installment-schedule", properties.GetInstallmentSchedule)
+        protected.GET("/properties/:lead_file_no/installment-schedule/pdf", properties.GetInstallmentSchedulePDF)
         protected.GET("/properties/:lead_file_no/transactions", properties.GetTransactions)
         protected.GET("/projects", properties.GetUserProjects)
         protected.GET("/projects/:project_id/properties", properties.GetUserPropertiesByProject)

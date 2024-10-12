@@ -1,14 +1,22 @@
 package properties
 
 import (
-	"mobile-customer-portal-server/models"
-	"mobile-customer-portal-server/utils"
+	"bytes"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
+	"github.com/phpdave11/gofpdf"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
+	"mobile-customer-portal-server/models"
+	"mobile-customer-portal-server/utils"
 )
+
 
 func GetProperties(c *gin.Context) {
 	// Get the user from the context
@@ -63,6 +71,131 @@ func GetInstallmentSchedule(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 			"installment_schedules": schedules,
 	})
+}
+
+func GetInstallmentSchedulePDF(c *gin.Context) {
+	// Get the user from the context
+	userInterface, exists := c.Get("user")
+	if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+			return
+	}
+	user := userInterface.(models.User)
+
+	leadFileNo := c.Param("lead_file_no")
+	if leadFileNo == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Lead file number is required"})
+			return
+	}
+
+	// Verify that the lead file belongs to the user
+	var leadFile models.LeadFile
+	if err := utils.CRMDB.Where("lead_file_no = ? AND customer_id = ?", leadFileNo, user.CustomerNumber).First(&leadFile).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Property not found or does not belong to the user"})
+			return
+	}
+
+	// Fetch the installment schedules
+	var schedules []models.InstallmentSchedule
+	if err := utils.CRMDB.Where("member_no = ? AND leadfile_no = ?", user.CustomerNumber, leadFileNo).Order("due_date ASC").Find(&schedules).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch installment schedules"})
+			return
+	}
+
+	log.Printf("Generating PDF for user: %s, property: %s", user.CustomerNumber, leadFile.PlotNumber)
+	log.Printf("Number of schedules: %d", len(schedules))
+
+	// Check if schedules are empty
+	if len(schedules) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No installment schedules found"})
+		return
+	}
+
+	// Generate the PDF using gofpdf
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(15, 20, 15)
+	pdf.AddPage()
+
+	// Add title
+	pdf.SetFont("Helvetica", "B", 16)
+	if pdf.Err() {
+			log.Printf("Failed to set font: %v", pdf.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set font"})
+			return
+	}
+	pdf.CellFormat(0, 10, "Payment Schedule", "", 1, "C", false, 0, "")
+	pdf.Ln(5)
+
+	// Add property and customer information
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(0, 10, "Property: "+leadFile.PlotNumber)
+	pdf.Ln(6)
+	pdf.Cell(0, 10, "Customer: "+user.CustomerNumber)
+	pdf.Ln(10)
+
+	// Table Headers
+	pdf.SetFont("Helvetica", "B", 12)
+	pdf.SetFillColor(200, 200, 200)
+	pdf.CellFormat(10, 10, "No.", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(30, 10, "Due Date", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(35, 10, "Installment Amount", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(35, 10, "Remaining Amount", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(35, 10, "Amount Paid", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(35, 10, "Penalties Accrued", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(15, 10, "Paid", "1", 1, "C", true, 0, "")
+	pdf.SetFont("Helvetica", "", 12)
+
+	// Initialize the caser for title casing
+	caser := cases.Title(language.English)
+
+	// Helper function to format amounts
+	formatAmount := func(amountStr string) string {
+			// Remove commas
+			amountStr = strings.ReplaceAll(amountStr, ",", "")
+			// Parse to float64
+			amount, err := strconv.ParseFloat(amountStr, 64)
+			if err != nil {
+					return amountStr // Return original string if parsing fails
+			}
+			// Format with commas and two decimal places
+			return humanize.CommafWithDigits(amount, 2)
+	}
+
+	// Add the data
+	for _, schedule := range schedules {
+			pdf.CellFormat(10, 10, strconv.Itoa(schedule.InstallmentNo), "1", 0, "C", false, 0, "")
+			dueDate := ""
+			if schedule.DueDate != nil {
+					dueDate = schedule.DueDate.Format("2006-01-02")
+			}
+			pdf.CellFormat(30, 10, dueDate, "1", 0, "C", false, 0, "")
+			pdf.CellFormat(35, 10, formatAmount(schedule.InstallmentAmount), "1", 0, "R", false, 0, "")
+			pdf.CellFormat(35, 10, formatAmount(schedule.RemainingAmount), "1", 0, "R", false, 0, "")
+			pdf.CellFormat(35, 10, formatAmount(schedule.AmountPaid), "1", 0, "R", false, 0, "")
+			pdf.CellFormat(35, 10, humanize.CommafWithDigits(float64(schedule.PenaltiesAccrued), 2), "1", 0, "R", false, 0, "")
+			pdf.CellFormat(15, 10, caser.String(schedule.Paid), "1", 1, "C", false, 0, "")
+	}
+
+	// Check for errors before outputting PDF
+	if pdf.Err() {
+			log.Printf("Error generating PDF: %v", pdf.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate PDF"})
+			return
+	}
+
+	// Output PDF to buffer
+	var buf bytes.Buffer
+	err := pdf.Output(&buf)
+	if err != nil {
+			log.Printf("Failed to generate PDF: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate PDF"})
+			return
+	}
+
+	// Set headers and send the PDF
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", "attachment; filename=payment_schedule.pdf")
+	c.Data(http.StatusOK, "application/pdf", buf.Bytes())
 }
 
 func GetTransactions(c *gin.Context) {
