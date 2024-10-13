@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"mobile-customer-portal-server/handlers/auth"
+	"mobile-customer-portal-server/handlers/payments"
 	"mobile-customer-portal-server/handlers/properties"
 	"mobile-customer-portal-server/utils"
 
@@ -59,6 +60,7 @@ func main() {
         protected.GET("/projects", properties.GetUserProjects)
         protected.GET("/projects/:project_id/properties", properties.GetUserPropertiesByProject)
         protected.GET("/properties/:lead_file_no/receipts", properties.GetReceiptsByProperty)
+        protected.POST("/create-payment-intent", payments.CreatePaymentIntent)
     }
 
     // Set the port
