@@ -8,6 +8,7 @@ import (
 	"mobile-customer-portal-server/handlers/auth"
 	"mobile-customer-portal-server/handlers/payments"
 	"mobile-customer-portal-server/handlers/properties"
+	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
 
 	"github.com/gin-contrib/cors"
@@ -48,6 +49,7 @@ func main() {
     r.POST("/request-otp", auth.RequestOTP)
     r.POST("/verify-otp-reset", auth.VerifyOTPReset)
     r.POST("/reset-password", auth.ResetPassword)
+    r.POST("/webhook", payments.HandleStripeWebhook)
 
     // Protected routes
     protected := r.Group("/")
@@ -61,7 +63,10 @@ func main() {
         protected.GET("/projects/:project_id/properties", properties.GetUserPropertiesByProject)
         protected.GET("/properties/:lead_file_no/receipts", properties.GetReceiptsByProperty)
         protected.POST("/create-payment-intent", payments.CreatePaymentIntent)
+        protected.POST("/save-push-token", auth.SavePushToken)
     }
+
+    utils.CustomerPortalDB.AutoMigrate(&models.User{})
 
     // Set the port
     port := os.Getenv("PORT")
