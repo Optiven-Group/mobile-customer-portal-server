@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
@@ -220,36 +221,45 @@ func GetTransactions(c *gin.Context) {
 			return
 	}
 
-	// Fetch the installment schedules for the property
-	var schedules []models.InstallmentSchedule
-	if err := utils.CRMDB.Where("member_no = ? AND leadfile_no = ?", user.CustomerNumber, leadFileNo).Find(&schedules).Error; err != nil {
+	// Fetch receipts for the property where Type is 'Posted'
+	var receipts []models.Receipt
+	if err := utils.DefaultDB.Where("Lead_file_no = ? AND Customer_Id = ? AND Type = ?", leadFileNo, user.CustomerNumber, "Posted").Order("Payment_Date1 DESC").Find(&receipts).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
 			return
 	}
 
-	// Map the InstallmentSchedule data to transactions
+	// Map the receipts data to transactions
 	var transactions []map[string]interface{}
-	for _, schedule := range schedules {
-			// Parse the amount_paid string to float64
-			amountPaidStr := strings.ReplaceAll(schedule.AmountPaid, ",", "")
-			amountPaid, err := strconv.ParseFloat(amountPaidStr, 64)
-			if err != nil {
-					amountPaid = 0
-			}
-
-			// Format the date and time
+	for _, receipt := range receipts {
 			dateStr := ""
 			timeStr := ""
-			if schedule.DueDate != nil {
-					dateStr = schedule.DueDate.Format("2006-01-02")
-					timeStr = schedule.DueDate.Format("15:04")
+
+			if receipt.PaymentDate1 != "" {
+					// Parse the string to time.Time
+					parsedTime, err := time.Parse("2006-01-02T15:04:05Z07:00", receipt.PaymentDate1)
+					if err != nil {
+							log.Printf("Error parsing PaymentDate1 for receipt ID %d: %v", receipt.ID, err)
+							// If parsing fails, try alternative formats
+							parsedTime, err = time.Parse("2006-01-02 15:04:05", receipt.PaymentDate1)
+							if err != nil {
+									// If still error, use the raw string
+									dateStr = receipt.PaymentDate1
+									timeStr = ""
+							} else {
+									dateStr = parsedTime.Format("2006-01-02")
+									timeStr = parsedTime.Format("15:04")
+							}
+					} else {
+							dateStr = parsedTime.Format("2006-01-02")
+							timeStr = parsedTime.Format("15:04")
+					}
 			}
 
 			transaction := map[string]interface{}{
-					"id":     strconv.Itoa(schedule.ISID),
+					"id":     strconv.Itoa(receipt.ID),
 					"date":   dateStr,
-					"type":   "Installment",
-					"amount": amountPaid,
+					"type":   receipt.TransactionType, // e.g., "Installment"
+					"amount": receipt.AmountLCY,
 					"time":   timeStr,
 					// Add other fields if necessary
 			}
@@ -379,5 +389,33 @@ func GetReceiptsByProperty(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 			"receipts": receipts,
+	})
+}
+
+func GetUserTotalSpent(c *gin.Context) {
+	// Get the user from the context
+	userInterface, exists := c.Get("user")
+	if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+			return
+	}
+	user := userInterface.(models.User)
+
+	// Fetch all receipts where customer_id = user.CustomerNumber and Type = 'Posted'
+	var receipts []models.Receipt
+	if err := utils.DefaultDB.Where("Customer_Id = ? AND Type = ?", user.CustomerNumber, "Posted").Find(&receipts).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch receipts"})
+			return
+	}
+
+	totalSpent := 0.0
+
+	for _, receipt := range receipts {
+			amount := receipt.AmountLCY
+			totalSpent += amount
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+			"total_spent": totalSpent,
 	})
 }

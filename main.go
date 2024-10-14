@@ -66,6 +66,7 @@ func main() {
         protected.POST("/create-payment-intent", payments.CreatePaymentIntent)
         protected.POST("/save-push-token", auth.SavePushToken)
         protected.POST("/initiate-mpesa-payment", payments.InitiateMpesaPayment)
+        protected.GET("/user/total-spent", properties.GetUserTotalSpent)
     }
 
     utils.CustomerPortalDB.AutoMigrate(&models.User{})
