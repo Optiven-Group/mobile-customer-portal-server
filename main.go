@@ -8,6 +8,7 @@ import (
 	"mobile-customer-portal-server/handlers/auth"
 	"mobile-customer-portal-server/handlers/payments"
 	"mobile-customer-portal-server/handlers/properties"
+    "mobile-customer-portal-server/handlers/referrals"
 	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
 
@@ -67,11 +68,14 @@ func main() {
         protected.POST("/save-push-token", auth.SavePushToken)
         protected.POST("/initiate-mpesa-payment", payments.InitiateMpesaPayment)
         protected.GET("/user/total-spent", properties.GetUserTotalSpent)
+        protected.POST("/referrals", referrals.SubmitReferral)
+        protected.GET("/referrals", referrals.GetUserReferrals)
+        protected.POST("/referrals/:id/redeem", referrals.RedeemReferralReward)
     }
 
     utils.CustomerPortalDB.AutoMigrate(&models.User{})
     utils.CustomerPortalDB.AutoMigrate(&models.MpesaPayment{})
-
+    utils.CustomerPortalDB.AutoMigrate(&models.Referral{})
 
     // Set the port
     port := os.Getenv("PORT")
