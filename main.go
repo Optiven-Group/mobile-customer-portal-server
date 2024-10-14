@@ -50,6 +50,7 @@ func main() {
     r.POST("/verify-otp-reset", auth.VerifyOTPReset)
     r.POST("/reset-password", auth.ResetPassword)
     r.POST("/webhook", payments.HandleStripeWebhook)
+    r.POST("/mpesa/callback", payments.MpesaCallback)
 
     // Protected routes
     protected := r.Group("/")
@@ -64,9 +65,12 @@ func main() {
         protected.GET("/properties/:lead_file_no/receipts", properties.GetReceiptsByProperty)
         protected.POST("/create-payment-intent", payments.CreatePaymentIntent)
         protected.POST("/save-push-token", auth.SavePushToken)
+        protected.POST("/initiate-mpesa-payment", payments.InitiateMpesaPayment)
     }
 
     utils.CustomerPortalDB.AutoMigrate(&models.User{})
+    utils.CustomerPortalDB.AutoMigrate(&models.MpesaPayment{})
+
 
     // Set the port
     port := os.Getenv("PORT")
