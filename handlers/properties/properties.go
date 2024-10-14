@@ -419,3 +419,15 @@ func GetUserTotalSpent(c *gin.Context) {
 			"total_spent": totalSpent,
 	})
 }
+
+func GetFeaturedProjects(c *gin.Context) {
+	var projects []models.Project
+	if err := utils.DefaultDB.Where("is_featured = ?", true).Find(&projects).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch featured projects"})
+			return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+			"projects": projects,
+	})
+}

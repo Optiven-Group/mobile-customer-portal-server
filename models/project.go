@@ -12,6 +12,9 @@ type Project struct {
     EPRID             string `gorm:"column:EPR_id" json:"epr_id"`
     OfferLetterExist  string `gorm:"column:offer_letter_existence" json:"offer_letter_existence"`
     PaymentModel      string `gorm:"column:Payment_model" json:"payment_model"`
+    Description string `gorm:"column:description" json:"description"`
+    Banner      string `gorm:"column:banner" json:"banner"`
+    IsFeatured  bool   `gorm:"column:is_featured" json:"is_featured"`
 }
 
 // TableName to override the default table name

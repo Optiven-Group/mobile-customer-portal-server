@@ -71,6 +71,7 @@ func main() {
         protected.POST("/referrals", referrals.SubmitReferral)
         protected.GET("/referrals", referrals.GetUserReferrals)
         protected.POST("/referrals/:id/redeem", referrals.RedeemReferralReward)
+        protected.GET("/featured-projects", properties.GetFeaturedProjects)
     }
 
     utils.CustomerPortalDB.AutoMigrate(&models.User{})
