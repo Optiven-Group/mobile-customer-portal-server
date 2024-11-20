@@ -8,7 +8,7 @@ import (
 	"mobile-customer-portal-server/handlers/auth"
 	"mobile-customer-portal-server/handlers/payments"
 	"mobile-customer-portal-server/handlers/properties"
-    "mobile-customer-portal-server/handlers/referrals"
+	"mobile-customer-portal-server/handlers/referrals"
 	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
 
@@ -50,7 +50,6 @@ func main() {
     r.POST("/request-otp", auth.RequestOTP)
     r.POST("/verify-otp-reset", auth.VerifyOTPReset)
     r.POST("/reset-password", auth.ResetPassword)
-    r.POST("/webhook", payments.HandleStripeWebhook)
     r.POST("/mpesa/callback", payments.MpesaCallback)
 
     // Protected routes
@@ -64,7 +63,6 @@ func main() {
         protected.GET("/projects", properties.GetUserProjects)
         protected.GET("/projects/:project_id/properties", properties.GetUserPropertiesByProject)
         protected.GET("/properties/:lead_file_no/receipts", properties.GetReceiptsByProperty)
-        protected.POST("/create-payment-intent", payments.CreatePaymentIntent)
         protected.POST("/save-push-token", auth.SavePushToken)
         protected.POST("/initiate-mpesa-payment", payments.InitiateMpesaPayment)
         protected.GET("/user/total-spent", properties.GetUserTotalSpent)
@@ -74,6 +72,7 @@ func main() {
         protected.GET("/featured-projects", properties.GetFeaturedProjects)
     }
 
+    // Migrate database models
     utils.CustomerPortalDB.AutoMigrate(&models.User{})
     utils.CustomerPortalDB.AutoMigrate(&models.MpesaPayment{})
     utils.CustomerPortalDB.AutoMigrate(&models.Referral{})
@@ -85,5 +84,7 @@ func main() {
     }
 
     // Run the server
-    r.Run(":" + port) // listen and serve on 0.0.0.0:8080
+    if err := r.Run(":" + port); err != nil {
+        log.Fatalf("Failed to run server: %v", err)
+    }
 }
