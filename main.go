@@ -71,6 +71,7 @@ func main() {
         protected.GET("/referrals", referrals.GetUserReferrals)
         protected.POST("/referrals/:id/redeem", referrals.RedeemReferralReward)
         protected.GET("/featured-projects", properties.GetFeaturedProjects)
+        protected.GET("/properties/:lead_file_no/receipts/:receipt_id/pdf", properties.GetReceiptPDF)
     }
 
     // Migrate database models

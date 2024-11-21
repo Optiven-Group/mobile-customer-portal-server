@@ -2,6 +2,7 @@ package properties
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -493,3 +494,103 @@ func GetTitleStatus(c *gin.Context) {
 	})
 }
 
+func GetReceiptPDF(c *gin.Context) {
+	// Get the user from the context
+	userInterface, exists := c.Get("user")
+	if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+			return
+	}
+	user := userInterface.(models.User)
+
+	// Get lead_file_no and receipt_id from URL parameters
+	leadFileNo := c.Param("lead_file_no")
+	receiptIDStr := c.Param("receipt_id")
+
+	if leadFileNo == "" || receiptIDStr == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Lead file number and receipt ID are required"})
+			return
+	}
+
+	// Convert receiptIDStr to integer
+	receiptID, err := strconv.Atoi(receiptIDStr)
+	if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid receipt ID"})
+			return
+	}
+
+	log.Printf("User CustomerNumber: %s", user.CustomerNumber)
+	log.Printf("LeadFileNo: %s", leadFileNo)
+	log.Printf("ReceiptID: %d", receiptID)
+
+    // Verify that the lead file belongs to the user and is not dropped
+    var leadFile models.LeadFile
+    err = utils.CRMDB.
+        Where("lead_file_no = ? AND customer_id = ? AND lead_file_status_dropped = ?", leadFileNo, user.CustomerNumber, "No").
+        First(&leadFile).Error
+    if err != nil {
+        log.Printf("Error fetching lead file: %v", err)
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Property not found, does not belong to the user, or is dropped"})
+        return
+    }
+
+    // Fetch the receipt
+    var receipt models.Receipt
+    err = utils.DefaultDB.
+        Where("ID = ? AND Lead_file_no = ? AND Customer_Id = ? AND Type = ?", receiptID, leadFileNo, user.CustomerNumber, "Posted").
+        First(&receipt).Error
+    if err != nil {
+        log.Printf("Error fetching receipt: %v", err)
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Receipt not found, does not belong to the user or the property, or is not posted"})
+        return
+    }
+
+	// For debugging, log each step
+	log.Printf("Generating receipt PDF for user %s, lead file %s, receipt %d", user.CustomerNumber, leadFileNo, receiptID)
+
+	// Generate the PDF
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(15, 20, 15)
+	pdf.AddPage()
+
+	pdf.SetFont("Helvetica", "B", 20)
+	pdf.Cell(0, 10, "Optiven Limited")
+	pdf.Ln(10)
+
+	// Add receipt title
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.Cell(0, 10, "Receipt")
+	pdf.Ln(10)
+
+	// Add receipt details
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(0, 6, "Receipt No: "+receipt.ReceiptNo)
+	pdf.Ln(6)
+	pdf.Cell(0, 6, "Date: "+receipt.DatePosted)
+	pdf.Ln(6)
+	pdf.Cell(0, 6, "Property: "+leadFile.PlotNumber)
+	pdf.Ln(6)
+	pdf.Cell(0, 6, fmt.Sprintf("Amount: KES %.2f", receipt.AmountLCY))
+	pdf.Ln(10)
+
+	// Check for errors after adding content
+	if pdf.Err() {
+			log.Printf("Error generating PDF content: %v", pdf.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate PDF"})
+			return
+	}
+
+	// Output PDF to buffer
+	var buf bytes.Buffer
+	err = pdf.Output(&buf)
+	if err != nil {
+			log.Printf("Failed to generate PDF: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate PDF"})
+			return
+	}
+
+	// Set headers and send the PDF
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=receipt_%s.pdf", receipt.ReceiptNo))
+	c.Data(http.StatusOK, "application/pdf", buf.Bytes())
+}
