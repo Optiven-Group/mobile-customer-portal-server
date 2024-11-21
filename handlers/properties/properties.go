@@ -462,3 +462,34 @@ func GetFeaturedProjects(c *gin.Context) {
 		"projects": projects,
 	})
 }
+
+func GetTitleStatus(c *gin.Context) {
+	// Get the user from the context
+	userInterface, exists := c.Get("user")
+	if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+			return
+	}
+	user := userInterface.(models.User)
+
+	leadFileNo := c.Param("lead_file_no")
+	if leadFileNo == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Lead file number is required"})
+			return
+	}
+
+	// Verify that the lead file belongs to the user and is not dropped
+	var leadFile models.LeadFile
+	if err := utils.CRMDB.
+			Where("lead_file_no = ? AND customer_id = ? AND lead_file_status_dropped = ?", leadFileNo, user.CustomerNumber, "No").
+			First(&leadFile).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Property not found, does not belong to the user, or is dropped"})
+			return
+	}
+
+	// Respond with the title status
+	c.JSON(http.StatusOK, gin.H{
+			"title_status": leadFile.TitleStatus,
+	})
+}
+

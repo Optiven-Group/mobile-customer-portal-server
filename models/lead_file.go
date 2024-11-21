@@ -34,6 +34,7 @@ type LeadFile struct {
     BookingID             string     `gorm:"column:booking_id" json:"booking_id"`
     BookingDate           *time.Time `gorm:"column:Booking_date" json:"booking_date"`
     AdditionalDepositDate *time.Time `gorm:"column:Additional_deposit_date" json:"additional_deposit_date"`
+    TitleStatus           string     `gorm:"column:title_status" json:"title_status"`
 }
 
 // TableName to override the default table name

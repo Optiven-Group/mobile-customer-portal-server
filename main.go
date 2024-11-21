@@ -60,6 +60,7 @@ func main() {
         protected.GET("/properties/:lead_file_no/installment-schedule", properties.GetInstallmentSchedule)
         protected.GET("/properties/:lead_file_no/installment-schedule/pdf", properties.GetInstallmentSchedulePDF)
         protected.GET("/properties/:lead_file_no/transactions", properties.GetTransactions)
+        protected.GET("/properties/:lead_file_no/title-status", properties.GetTitleStatus)
         protected.GET("/projects", properties.GetUserProjects)
         protected.GET("/projects/:project_id/properties", properties.GetUserPropertiesByProject)
         protected.GET("/properties/:lead_file_no/receipts", properties.GetReceiptsByProperty)
