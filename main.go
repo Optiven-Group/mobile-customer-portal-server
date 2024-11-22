@@ -58,7 +58,6 @@ func main() {
     {
         protected.GET("/properties", properties.GetProperties)
         protected.GET("/properties/:lead_file_no/installment-schedule", properties.GetInstallmentSchedule)
-        protected.GET("/properties/:lead_file_no/installment-schedule/pdf", properties.GetInstallmentSchedulePDF)
         protected.GET("/properties/:lead_file_no/transactions", properties.GetTransactions)
         protected.GET("/properties/:lead_file_no/title-status", properties.GetTitleStatus)
         protected.GET("/projects", properties.GetUserProjects)
@@ -71,7 +70,9 @@ func main() {
         protected.GET("/referrals", referrals.GetUserReferrals)
         protected.POST("/referrals/:id/redeem", referrals.RedeemReferralReward)
         protected.GET("/featured-projects", properties.GetFeaturedProjects)
+        protected.GET("/properties/:lead_file_no/installment-schedule/pdf", properties.GetInstallmentSchedulePDF)
         protected.GET("/properties/:lead_file_no/receipts/:receipt_id/pdf", properties.GetReceiptPDF)
+
     }
 
     // Migrate database models
