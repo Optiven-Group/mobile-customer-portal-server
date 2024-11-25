@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"mobile-customer-portal-server/handlers/auth"
+	"mobile-customer-portal-server/handlers/notifications"
 	"mobile-customer-portal-server/handlers/payments"
 	"mobile-customer-portal-server/handlers/properties"
 	"mobile-customer-portal-server/handlers/referrals"
@@ -72,6 +73,7 @@ func main() {
         protected.GET("/featured-projects", properties.GetFeaturedProjects)
         protected.GET("/properties/:lead_file_no/installment-schedule/pdf", properties.GetInstallmentSchedulePDF)
         protected.GET("/properties/:lead_file_no/receipts/:receipt_id/pdf", properties.GetReceiptPDF)
+        protected.POST("/send-notification", notifications.SendNotification)
 
     }
 

@@ -48,29 +48,28 @@ func init() {
 }
 
 func SavePushToken(c *gin.Context) {
+	var req struct {
+		PushToken string `json:"push_token"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
 	userInterface, exists := c.Get("user")
 	if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
-			return
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
 	}
 	user := userInterface.(models.User)
 
-	var input struct {
-			PushToken string `json:"pushToken"`
+	if err := utils.CustomerPortalDB.Model(&user).Update("push_token", req.PushToken).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save push token"})
+		return
 	}
 
-	if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data."})
-			return
-	}
-
-	// Update the user's push token in the database
-	if err := utils.CustomerPortalDB.Model(&user).Update("push_token", input.PushToken).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save push token"})
-			return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Push token saved successfully"})
+	c.JSON(http.StatusOK, gin.H{"status": "Push token saved"})
 }
 
 
