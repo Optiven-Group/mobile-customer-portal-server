@@ -51,7 +51,6 @@ func SavePushToken(c *gin.Context) {
 	var req struct {
 		PushToken string `json:"push_token"`
 	}
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
