@@ -22,15 +22,6 @@ import (
 // Helper function to add a header to the PDF
 func addHeader(pdf *gofpdf.Fpdf) {
 	pdf.SetHeaderFunc(func() {
-			// Define ImageOptions
-			options := gofpdf.ImageOptions{
-					ImageType: "PNG", // Specify the image type ("PNG", "JPEG", etc.)
-					ReadDpi:   false,
-			}
-			
-			// Add company logo using ImageOptions without capturing an error
-			pdf.ImageOptions("../../assets/logo.png", 15, 10, 30, 0, false, options, 0, "")
-			
 			// Add company name
 			pdf.SetFont("Helvetica", "B", 20)
 			pdf.CellFormat(0, 15, "Optiven Limited", "", 0, "C", false, 0, "")
@@ -126,9 +117,12 @@ func GetInstallmentSchedule(c *gin.Context) {
         return
     }
 
-    // Fetch the installment schedules from the CRM database where member_no and leadfile_no match
+    // Fetch the installment schedules from the CRM database where member_no and leadfile_no match, ordered by due_date
     var schedules []models.InstallmentSchedule
-    if err := utils.CRMDB.Where("member_no = ? AND leadfile_no = ?", user.CustomerNumber, leadFileNo).Find(&schedules).Error; err != nil {
+    if err := utils.CRMDB.
+        Where("member_no = ? AND leadfile_no = ?", user.CustomerNumber, leadFileNo).
+        Order("due_date ASC").
+        Find(&schedules).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch installment schedules"})
         return
     }
@@ -137,6 +131,7 @@ func GetInstallmentSchedule(c *gin.Context) {
         "installment_schedules": schedules,
     })
 }
+
 
 func GetInstallmentSchedulePDF(c *gin.Context) {
     // Retrieve user from context
@@ -298,10 +293,11 @@ func GetTransactions(c *gin.Context) {
 
     // Fetch receipts for the property where Type is 'Posted'
     var receipts []models.Receipt
-    if err := utils.DefaultDB.Where("Lead_file_no = ? AND Customer_Id = ? AND Type = ?", leadFileNo, user.CustomerNumber, "Posted").Order("Payment_Date1 DESC").Find(&receipts).Error; err != nil {
+    if err := utils.DefaultDB.Where("Lead_file_no = ? AND Customer_Id = ? AND Type = ? AND Transaction_Type = ?", leadFileNo, user.CustomerNumber, "Posted", "Installment").Order("Payment_Date1 DESC").Find(&receipts).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
         return
     }
+    
 
     // Map the receipts data to transactions
     var transactions []map[string]interface{}
@@ -333,10 +329,9 @@ func GetTransactions(c *gin.Context) {
         transaction := map[string]interface{}{
             "id":     strconv.Itoa(receipt.ID),
             "date":   dateStr,
-            "type":   receipt.TransactionType, // e.g., "Installment"
-            "amount": formatAmount(receipt.AmountLCY),
+            "type":   receipt.TransactionType,
+            "amount": receipt.AmountLCY,
             "time":   timeStr,
-            // Add other fields if necessary
         }
         transactions = append(transactions, transaction)
     }
@@ -612,33 +607,63 @@ func GetReceiptPDF(c *gin.Context) {
     addHeader(pdf)
     addFooter(pdf)
 
+    // Add receipt title
     pdf.SetFont("Helvetica", "B", 16)
     pdf.CellFormat(0, 10, "Receipt", "", 1, "C", false, 0, "")
     pdf.Ln(10)
 
     // Receipt details
     pdf.SetFont("Helvetica", "", 12)
+
+    // Format date
+    datePosted := receipt.DatePosted
+    if datePosted == "" {
+        datePosted = time.Now().Format("02 January 2006")
+    } else {
+        // Parse the date and format it
+        parsedDate, err := time.Parse("2006-01-02", datePosted)
+        if err == nil {
+            datePosted = parsedDate.Format("02 January 2006")
+        }
+    }
+
+    // Data to display
     data := [][]string{
         {"Receipt No:", receipt.ReceiptNo},
-        {"Date:", receipt.DatePosted},
+        {"Date:", datePosted},
         {"Customer:", user.CustomerNumber},
         {"Property:", leadFile.PlotNumber},
-        {"Amount:", formatAmount(receipt.AmountLCY)},
+        {"Amount:", "KES " + formatAmount(receipt.AmountLCY)},
     }
 
-    pdf.SetFillColor(245, 245, 245)
+    // Set column widths
+    colWidths := []float64{50, 120} // Adjust as needed
+
+    // Starting position
+    startY := pdf.GetY()
+
+    // Draw rectangle border
+    pdf.Rect(15, startY, 180, float64(len(data)*10+10), "D")
+
+    pdf.Ln(5)
     for _, row := range data {
-        pdf.CellFormat(50, 8, row[0], "", 0, "L", false, 0, "")
-        pdf.CellFormat(0, 8, row[1], "", 1, "L", false, 0, "")
+        pdf.SetFont("Helvetica", "B", 12)
+        pdf.CellFormat(colWidths[0], 10, row[0], "", 0, "L", false, 0, "")
+        pdf.SetFont("Helvetica", "", 12)
+        pdf.CellFormat(colWidths[1], 10, row[1], "", 1, "L", false, 0, "")
     }
-
     pdf.Ln(10)
-    pdf.SetFont("Helvetica", "I", 12)
-    pdf.MultiCell(0, 8, "Thank you for your payment. If you have any questions, please contact our customer service.", "", "L", false)
 
-    // Draw bottom line
-    pdf.SetLineWidth(0.5)
-    pdf.Line(15, pdf.GetY(), 15+sum([]float64{50, 0}), pdf.GetY()) // Adjust the second parameter to match your layout
+    // Thank you message
+    pdf.SetFont("Helvetica", "I", 12)
+    pdf.MultiCell(0, 8, "Thank you for your payment. If you have any questions, please contact our customer service.", "", "C", false)
+
+    // Footer with company contact info (optional)
+    pdf.SetY(-30)
+    pdf.SetFont("Helvetica", "", 10)
+    pdf.CellFormat(0, 5, "Optiven Limited", "", 1, "C", false, 0, "")
+    pdf.CellFormat(0, 5, "Phone: +254790300300 | Email: info@optiven.co.ke", "", 1, "C", false, 0, "")
+    pdf.CellFormat(0, 5, "Head Office: Absa Towers, Loita Street , 2nd Floor,", "", 1, "C", false, 0, "")
 
     // Output PDF to buffer
     var buf bytes.Buffer

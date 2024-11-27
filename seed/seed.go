@@ -1,4 +1,3 @@
-// seed/seed.go
 package seed
 
 import (
