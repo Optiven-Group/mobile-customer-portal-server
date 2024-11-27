@@ -1,13 +1,13 @@
 package auth
 
 import (
-    "mobile-customer-portal-server/models"
-    "mobile-customer-portal-server/utils"
-    "net/http"
-    "strings"
+	"mobile-customer-portal-server/models"
+	"mobile-customer-portal-server/utils"
+	"net/http"
+	"strings"
 
-    "github.com/gin-gonic/gin"
-    "github.com/golang-jwt/jwt"
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 )
 
 func AuthMiddleware() gin.HandlerFunc {
@@ -19,7 +19,6 @@ func AuthMiddleware() gin.HandlerFunc {
             return
         }
 
-        // Split the header to get the token part
         parts := strings.SplitN(authHeader, " ", 2)
         if len(parts) != 2 || parts[0] != "Bearer" {
             c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
@@ -31,10 +30,21 @@ func AuthMiddleware() gin.HandlerFunc {
 
         // Parse the token
         token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-            return jwtSecret, nil
+            return utils.JwtSecret, nil
         })
 
-        if err != nil || !token.Valid {
+        if err != nil {
+            ve, ok := err.(*jwt.ValidationError)
+            if ok && ve.Errors&(jwt.ValidationErrorExpired) != 0 {
+                c.JSON(http.StatusUnauthorized, gin.H{"error": "Access token expired"})
+            } else {
+                c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+            }
+            c.Abort()
+            return
+        }
+
+        if !token.Valid {
             c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
             c.Abort()
             return
@@ -48,7 +58,7 @@ func AuthMiddleware() gin.HandlerFunc {
             return
         }
 
-        userIDFloat, ok := claims["user_id"].(float64) // JWT numeric values are float64
+        userIDFloat, ok := claims["user_id"].(float64)
         if !ok {
             c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
             c.Abort()
@@ -71,3 +81,4 @@ func AuthMiddleware() gin.HandlerFunc {
         c.Next()
     }
 }
+

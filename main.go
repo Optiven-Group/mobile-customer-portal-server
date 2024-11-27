@@ -50,7 +50,8 @@ func main() {
 	}
 
 	r.POST("/login", auth.Login)
-	r.POST("/logout", auth.Logout)
+	r.POST("/logout", auth.AuthMiddleware(), auth.Logout)
+	r.POST("/refresh-token", auth.RefreshToken)
 	r.POST("/verify-user", auth.VerifyUser)
 	r.POST("/verify-otp", auth.VerifyOTP)
 	r.POST("/complete-registration", auth.CompleteRegistration)

@@ -5,10 +5,8 @@ import (
 	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -51,22 +49,37 @@ func Login(c *gin.Context) {
     }
     
 
-    // Generate JWT token
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-        "user_id": user.ID,
-        "exp":     time.Now().Add(time.Hour * 72).Unix(), // Token expires in 72 hours
-    })
-
-    tokenString, err := token.SignedString(jwtSecret)
+    // Generate tokens
+    accessToken, err := utils.GenerateAccessToken(user.ID)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate access token"})
+        return
+    }
+
+    refreshToken, err := utils.GenerateRefreshToken(user.ID)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate refresh token"})
+        return
+    }
+
+    // Save refresh token hash in the database
+    hashedRefreshToken, err := bcrypt.GenerateFromPassword([]byte(refreshToken), bcrypt.DefaultCost)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not hash refresh token"})
+        return
+    }
+
+    user.RefreshToken = string(hashedRefreshToken)
+    if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save refresh token"})
         return
     }
 
     // Return the token and user data in the response
     c.JSON(http.StatusOK, gin.H{
         "message": "Login successful.",
-        "token":   tokenString,
+        "access_token":  accessToken,
+        "refresh_token": refreshToken,
         "user": gin.H{
             "id":             user.ID,
             "email":          user.Email,
@@ -80,9 +93,19 @@ func Login(c *gin.Context) {
 
 // Logout handles user sign-out
 func Logout(c *gin.Context) {
-    // Since JWT tokens are stateless, you can't invalidate them server-side without additional mechanisms.
-    // One common approach is to handle token blacklisting.
-    // For simplicity, we'll just return a success message.
+    userInterface, exists := c.Get("user")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+        return
+    }
+    user := userInterface.(models.User)
+
+    // Remove the refresh token from the database
+    user.RefreshToken = ""
+    if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to log out"})
+        return
+    }
 
     c.JSON(http.StatusOK, gin.H{
         "message": "Logout successful.",
