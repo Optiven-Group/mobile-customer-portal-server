@@ -6,8 +6,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func RefreshToken(c *gin.Context) {
@@ -20,30 +18,18 @@ func RefreshToken(c *gin.Context) {
         return
     }
 
-    // Parse the refresh token
-    token, err := jwt.Parse(input.RefreshToken, func(token *jwt.Token) (interface{}, error) {
-        return utils.JwtSecret, nil
-    })
-
-    if err != nil || !token.Valid {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+    // Extract user ID from the expired access token in the Authorization header
+    authHeader := c.GetHeader("Authorization")
+    if authHeader == "" {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
         return
     }
 
-    // Get the user ID from the token claims
-    claims, ok := token.Claims.(jwt.MapClaims)
-    if !ok {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
+    userID, err := utils.ExtractUserIDFromToken(authHeader)
+    if err != nil {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access token"})
         return
     }
-
-    userIDFloat, ok := claims["user_id"].(float64)
-    if !ok {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
-        return
-    }
-
-    userID := uint(userIDFloat)
 
     // Fetch the user from the database
     var user models.User
@@ -52,9 +38,11 @@ func RefreshToken(c *gin.Context) {
         return
     }
 
+    // Hash the provided refresh token
+    hashedInputToken := utils.HashToken(input.RefreshToken)
+
     // Verify the refresh token matches the one in the database
-    err = bcrypt.CompareHashAndPassword([]byte(user.RefreshToken), []byte(input.RefreshToken))
-    if err != nil {
+    if hashedInputToken != user.RefreshToken {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
         return
     }
@@ -66,20 +54,14 @@ func RefreshToken(c *gin.Context) {
         return
     }
 
-    newRefreshToken, err := utils.GenerateRefreshToken(user.ID)
+    newRefreshToken, err := utils.GenerateRefreshToken()
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate refresh token"})
         return
     }
 
-    // Save the new refresh token hash
-    hashedRefreshToken, err := bcrypt.GenerateFromPassword([]byte(newRefreshToken), bcrypt.DefaultCost)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not hash refresh token"})
-        return
-    }
-
-    user.RefreshToken = string(hashedRefreshToken)
+    // Hash and save the new refresh token
+    user.RefreshToken = utils.HashToken(newRefreshToken)
     if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save refresh token"})
         return

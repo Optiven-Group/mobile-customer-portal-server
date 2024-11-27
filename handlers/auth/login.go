@@ -47,7 +47,6 @@ func Login(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve lead files."})
         return
     }
-    
 
     // Generate tokens
     accessToken, err := utils.GenerateAccessToken(user.ID)
@@ -56,28 +55,25 @@ func Login(c *gin.Context) {
         return
     }
 
-    refreshToken, err := utils.GenerateRefreshToken(user.ID)
+    refreshToken, err := utils.GenerateRefreshToken()
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate refresh token"})
         return
     }
 
-    // Save refresh token hash in the database
-    hashedRefreshToken, err := bcrypt.GenerateFromPassword([]byte(refreshToken), bcrypt.DefaultCost)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not hash refresh token"})
-        return
-    }
+    // Hash the refresh token using SHA256
+    hashedRefreshToken := utils.HashToken(refreshToken)
 
-    user.RefreshToken = string(hashedRefreshToken)
+    // Save the hashed refresh token in the database
+    user.RefreshToken = hashedRefreshToken
     if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save refresh token"})
         return
     }
 
-    // Return the token and user data in the response
+    // Return the tokens and user data in the response
     c.JSON(http.StatusOK, gin.H{
-        "message": "Login successful.",
+        "message":       "Login successful.",
         "access_token":  accessToken,
         "refresh_token": refreshToken,
         "user": gin.H{
@@ -87,27 +83,5 @@ func Login(c *gin.Context) {
             "customerNumber": user.CustomerNumber,
             "leadFiles":      leadFiles,
         },
-    })
-}
-
-
-// Logout handles user sign-out
-func Logout(c *gin.Context) {
-    userInterface, exists := c.Get("user")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
-        return
-    }
-    user := userInterface.(models.User)
-
-    // Remove the refresh token from the database
-    user.RefreshToken = ""
-    if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to log out"})
-        return
-    }
-
-    c.JSON(http.StatusOK, gin.H{
-        "message": "Logout successful.",
     })
 }

@@ -1,6 +1,9 @@
 package utils
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"os"
 	"time"
@@ -36,12 +39,17 @@ func GenerateAccessToken(userID uint) (string, error) {
     return token.SignedString(JwtSecret)
 }
 
-// GenerateRefreshToken creates a new JWT refresh token
-func GenerateRefreshToken(userID uint) (string, error) {
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-        "user_id": userID,
-        "exp":     time.Now().Add(7 * 24 * time.Hour).Unix(), // Refresh token valid for 7 days
-    })
+// GenerateRefreshToken creates a new random refresh token
+func GenerateRefreshToken() (string, error) {
+    bytes := make([]byte, 32) // 256 bits
+    if _, err := rand.Read(bytes); err != nil {
+        return "", err
+    }
+    return hex.EncodeToString(bytes), nil
+}
 
-    return token.SignedString(JwtSecret)
+// HashToken hashes a token using SHA256
+func HashToken(token string) string {
+    hash := sha256.Sum256([]byte(token))
+    return hex.EncodeToString(hash[:])
 }
