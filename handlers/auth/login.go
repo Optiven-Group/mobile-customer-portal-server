@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"log"
 	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
 	"net/http"
@@ -41,6 +42,15 @@ func Login(c *gin.Context) {
         return
     }
 
+    // Fetch lead files associated with the customer
+    var leadFiles []models.LeadFile
+    if err := utils.CRMDB.Where("customer_id = ?", user.CustomerNumber).Find(&leadFiles).Error; err != nil {
+        log.Printf("Error fetching lead files: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve lead files."})
+        return
+    }
+    
+
     // Generate JWT token
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
         "user_id": user.ID,
@@ -61,6 +71,8 @@ func Login(c *gin.Context) {
             "id":             user.ID,
             "email":          user.Email,
             "name":           customer.CustomerName,
+            "customerNumber": user.CustomerNumber,
+            "leadFiles":      leadFiles,
         },
     })
 }
