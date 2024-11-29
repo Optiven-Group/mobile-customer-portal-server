@@ -64,7 +64,8 @@ func InitiateMpesaPayment(c *gin.Context) {
         return
     }
 
-    mpesaClient := mpesa.NewApp(http.DefaultClient, consumerKey, consumerSecret, mpesa.EnvironmentProduction)
+    // mpesaClient := mpesa.NewApp(http.DefaultClient, consumerKey, consumerSecret, mpesa.EnvironmentProduction)
+    mpesaClient := mpesa.NewApp(http.DefaultClient, consumerKey, consumerSecret, mpesa.EnvironmentSandbox)
 
 
     // Prepare the STK Push request

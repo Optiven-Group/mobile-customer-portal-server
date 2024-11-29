@@ -72,7 +72,7 @@ func SendNotification(c *gin.Context) {
 
 	// Optionally, save the notification to the database
 	notification := models.Notification{
-		UserID: user.ID, // Now uint, matches the updated model
+		UserID: user.ID,
 		Title:  req.Title,
 		Body:   req.Body,
 		Data:   "",
