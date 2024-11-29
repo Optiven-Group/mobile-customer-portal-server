@@ -31,12 +31,14 @@ func main() {
     r := gin.Default()
 
     r.Use(cors.New(cors.Config{
-        AllowAllOrigins: true,
-        AllowMethods:    []string{"GET", "POST", "PUT", "DELETE"},
-        AllowHeaders:    []string{"Origin", "Content-Type", "Authorization"},
-        ExposeHeaders:   []string{"Content-Length"},
-        MaxAge:          12 * time.Hour,
-    }))
+			AllowOrigins:     []string{"https://optivenconnect.optiven.co.ke"},
+			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+			AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+			ExposeHeaders:    []string{"Content-Length"},
+			AllowCredentials: true,
+			MaxAge:           12 * time.Hour,
+	}))
+	
 
     utils.ConnectDatabase()
 

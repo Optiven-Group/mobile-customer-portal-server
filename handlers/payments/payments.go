@@ -55,7 +55,7 @@ type STKPushRequest struct {
 }
 
 func getAccessToken(consumerKey, consumerSecret string) (string, error) {
-    url := "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
+    url := "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
 
     client := &http.Client{}
     req, err := http.NewRequest("GET", url, nil)
@@ -171,7 +171,7 @@ func InitiateMpesaPayment(c *gin.Context) {
     }
 
     // Send the HTTP request
-    stkPushURL := "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
+    stkPushURL := "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
     reqHTTP, err := http.NewRequest("POST", stkPushURL, bytes.NewBuffer(requestBody))
     if err != nil {
         log.Printf("Error creating HTTP request: %v", err)
