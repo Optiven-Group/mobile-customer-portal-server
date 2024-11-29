@@ -9,4 +9,5 @@ type Notification struct {
 	Body      string    `json:"body"`
 	Data      string    `json:"data"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

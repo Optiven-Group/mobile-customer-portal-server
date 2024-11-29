@@ -9,5 +9,6 @@ type MpesaPayment struct {
     CustomerNumber        string `gorm:"not null"`
     PhoneNumber           string `gorm:"not null"`
     Amount                string `gorm:"not null"`
-    Status                string `gorm:"not null"` // e.g., "Pending", "Success", "Failed"
+    Status                string `gorm:"not null"`
+    PlotNumber            string `gorm:"not null"`
 }

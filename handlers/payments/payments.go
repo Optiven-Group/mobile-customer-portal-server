@@ -1,28 +1,99 @@
 package payments
 
 import (
-	"bytes"
-	"context"
-	"encoding/base64"
-	"encoding/json"
-	"io/ioutil"
-	"log"
-	"mobile-customer-portal-server/models"
-	"mobile-customer-portal-server/utils"
-	"net/http"
-	"os"
-	"strconv"
-	"time"
+    "bytes"
+    "encoding/base64"
+    "encoding/json"
+    "fmt"
+    "io/ioutil"
+    "log"
+    "mobile-customer-portal-server/models"
+    "mobile-customer-portal-server/utils"
+    "net/http"
+    "os"
+    "strconv"
+    "strings"
+    "time"
 
-	"github.com/gin-gonic/gin"
-	mpesa "github.com/jwambugu/mpesa-golang-sdk"
+    "github.com/gin-gonic/gin"
+    mpesa "github.com/jwambugu/mpesa-golang-sdk"
 )
+
 
 type MpesaPaymentRequest struct {
     Amount                string `json:"amount"`
     PhoneNumber           string `json:"phone_number"`
     InstallmentScheduleID string `json:"installment_schedule_id"`
     CustomerNumber        string `json:"customer_number"`
+    PlotNumber            string `json:"plot_number"`
+}
+
+func isValidPhoneNumber(phoneNumber string) bool {
+    // Check that the phone number is numeric and starts with '2547' and is 12 digits long
+    if len(phoneNumber) != 12 {
+        return false
+    }
+    if !strings.HasPrefix(phoneNumber, "2547") {
+        return false
+    }
+    _, err := strconv.ParseUint(phoneNumber, 10, 64)
+    return err == nil
+}
+
+type STKPushRequest struct {
+    BusinessShortCode string `json:"BusinessShortCode"`
+    Password          string `json:"Password"`
+    Timestamp         string `json:"Timestamp"`
+    TransactionType   string `json:"TransactionType"`
+    Amount            int    `json:"Amount"`
+    PartyA            string `json:"PartyA"`
+    PartyB            string `json:"PartyB"`
+    PhoneNumber       string `json:"PhoneNumber"`
+    CallBackURL       string `json:"CallBackURL"`
+    AccountReference  string `json:"AccountReference"`
+    TransactionDesc   string `json:"TransactionDesc"`
+}
+
+func getAccessToken(consumerKey, consumerSecret string) (string, error) {
+    url := "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
+
+    client := &http.Client{}
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return "", err
+    }
+
+    // Set Basic Auth header
+    auth := base64.StdEncoding.EncodeToString([]byte(consumerKey + ":" + consumerSecret))
+    req.Header.Add("Authorization", "Basic "+auth)
+
+    resp, err := client.Do(req)
+    if err != nil {
+        return "", err
+    }
+    defer resp.Body.Close()
+
+    bodyBytes, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        return "", err
+    }
+
+    if resp.StatusCode != http.StatusOK {
+        return "", fmt.Errorf("failed to get access token: %s", string(bodyBytes))
+    }
+
+    var result map[string]interface{}
+    err = json.Unmarshal(bodyBytes, &result)
+    if err != nil {
+        return "", err
+    }
+
+    accessToken, ok := result["access_token"].(string)
+    if !ok {
+        return "", fmt.Errorf("access_token not found in response")
+    }
+
+    return accessToken, nil
 }
 
 // InitiateMpesaPayment handles the initiation of an M-PESA STK Push payment.
@@ -46,14 +117,13 @@ func InitiateMpesaPayment(c *gin.Context) {
         return
     }
 
-    // Validate phone number format (must be numeric and start with country code)
-    phoneNumber, err := strconv.ParseUint(req.PhoneNumber, 10, 64)
-    if err != nil {
+    // Validate phone number format
+    if !isValidPhoneNumber(req.PhoneNumber) {
         c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid phone number format"})
         return
     }
 
-    // Initialize Mpesa client
+    // Initialize variables
     consumerKey := os.Getenv("DARAJA_CONSUMER_KEY")
     consumerSecret := os.Getenv("DARAJA_CONSUMER_SECRET")
     passKey := os.Getenv("DARAJA_PASSKEY")
@@ -64,52 +134,97 @@ func InitiateMpesaPayment(c *gin.Context) {
         return
     }
 
-    // mpesaClient := mpesa.NewApp(http.DefaultClient, consumerKey, consumerSecret, mpesa.EnvironmentProduction)
-    mpesaClient := mpesa.NewApp(http.DefaultClient, consumerKey, consumerSecret, mpesa.EnvironmentSandbox)
-
-
-    // Prepare the STK Push request
-    businessShortCodeStr := os.Getenv("DARAJA_BUSINESS_SHORT_CODE")
-    businessShortCode, err := strconv.Atoi(businessShortCodeStr)
+    // Get access token
+    accessToken, err := getAccessToken(consumerKey, consumerSecret)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid business shortcode"})
+        log.Printf("Error getting access token: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get access token"})
         return
     }
 
+    // Prepare the STK Push request
+    businessShortCode := os.Getenv("DARAJA_BUSINESS_SHORT_CODE")
     timestamp := time.Now().Format("20060102150405")
-    passwordStr := businessShortCodeStr + passKey + timestamp
+    passwordStr := businessShortCode + passKey + timestamp
     password := base64.StdEncoding.EncodeToString([]byte(passwordStr))
 
-    stkPushRequest := mpesa.STKPushRequest{
-        BusinessShortCode: uint(businessShortCode),
+    stkPushRequest := STKPushRequest{
+        BusinessShortCode: businessShortCode,
         Password:          password,
         Timestamp:         timestamp,
-        TransactionType:   mpesa.CustomerPayBillOnlineTransactionType,
-        Amount:            uint(amount),
-        PartyA:            uint(phoneNumber),
-        PartyB:            uint(businessShortCode),
-        PhoneNumber:       phoneNumber,
+        TransactionType:   "CustomerPayBillOnline",
+        Amount:            amount,
+        PartyA:            req.PhoneNumber,
+        PartyB:            businessShortCode,
+        PhoneNumber:       req.PhoneNumber,
         CallBackURL:       callbackURL,
-        AccountReference:  req.CustomerNumber,
+        AccountReference:  req.PlotNumber,
         TransactionDesc:   "Payment of Installment",
     }
 
-    // Initiate the STK Push
-    response, err := mpesaClient.STKPush(context.Background(), passKey, stkPushRequest)
+    // Marshal the request to JSON
+    requestBody, err := json.Marshal(stkPushRequest)
     if err != nil {
-        log.Printf("Error initiating M-PESA payment: %v", err)
+        log.Printf("Error marshalling STKPushRequest: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate M-PESA payment"})
         return
     }
 
+    // Send the HTTP request
+    stkPushURL := "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
+    reqHTTP, err := http.NewRequest("POST", stkPushURL, bytes.NewBuffer(requestBody))
+    if err != nil {
+        log.Printf("Error creating HTTP request: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate M-PESA payment"})
+        return
+    }
+    reqHTTP.Header.Set("Content-Type", "application/json")
+    reqHTTP.Header.Set("Authorization", "Bearer "+accessToken)
+
+    client := &http.Client{}
+    resp, err := client.Do(reqHTTP)
+    if err != nil {
+        log.Printf("Error sending STK Push request: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate M-PESA payment"})
+        return
+    }
+    defer resp.Body.Close()
+
+    responseBody, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        log.Printf("Error reading response body: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate M-PESA payment"})
+        return
+    }
+
+    // Parse the response
+    var stkPushResponse map[string]interface{}
+    err = json.Unmarshal(responseBody, &stkPushResponse)
+    if err != nil {
+        log.Printf("Error unmarshalling STK Push response: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate M-PESA payment"})
+        return
+    }
+
+    // Check for errors in the response
+    if resp.StatusCode != http.StatusOK {
+        log.Printf("Error from M-PESA API: %s", string(responseBody))
+        c.JSON(http.StatusInternalServerError, gin.H{"error": stkPushResponse["errorMessage"]})
+        return
+    }
+
     // Save the payment details
+    checkoutRequestID, _ := stkPushResponse["CheckoutRequestID"].(string)
+    merchantRequestID, _ := stkPushResponse["MerchantRequestID"].(string)
+
     mpesaPayment := models.MpesaPayment{
-        CheckoutRequestID:     response.CheckoutRequestID,
+        CheckoutRequestID:     checkoutRequestID,
         InstallmentScheduleID: req.InstallmentScheduleID,
         CustomerNumber:        req.CustomerNumber,
         PhoneNumber:           req.PhoneNumber,
         Amount:                req.Amount,
         Status:                "Pending",
+        PlotNumber:            req.PlotNumber,
     }
 
     if err := utils.CustomerPortalDB.Create(&mpesaPayment).Error; err != nil {
@@ -120,11 +235,11 @@ func InitiateMpesaPayment(c *gin.Context) {
 
     c.JSON(http.StatusOK, gin.H{
         "message":             "M-PESA payment initiated",
-        "CheckoutRequestID":   response.CheckoutRequestID,
-        "MerchantRequestID":   response.MerchantRequestID,
-        "ResponseCode":        response.ResponseCode,
-        "ResponseDescription": response.ResponseDescription,
-        "CustomerMessage":     response.CustomerMessage,
+        "CheckoutRequestID":   checkoutRequestID,
+        "MerchantRequestID":   merchantRequestID,
+        "ResponseCode":        stkPushResponse["ResponseCode"],
+        "ResponseDescription": stkPushResponse["ResponseDescription"],
+        "CustomerMessage":     stkPushResponse["CustomerMessage"],
     })
 }
 
@@ -201,11 +316,25 @@ func MpesaCallback(c *gin.Context) {
             return
         }
 
+        // Send push notification and save notification
         if user.PushToken != "" {
-            sendPushNotification(user.PushToken, "Payment Successful", "Your M-PESA payment was successful.")
+            sendPushNotification(user.PushToken, "Payment Successful", fmt.Sprintf("Your payment of KES %s for plot %s was successful.", mpesaPayment.Amount, mpesaPayment.PlotNumber))
         } else {
             log.Printf("User does not have a push token")
         }
+
+        // Save notification to database
+        notification := models.Notification{
+            UserID: user.ID,
+            Title:  "Payment Successful",
+            Body:   fmt.Sprintf("Your payment of KES %s for plot %s was successful.", mpesaPayment.Amount, mpesaPayment.PlotNumber),
+            Data:   "",
+        }
+
+        if err := utils.CustomerPortalDB.Create(&notification).Error; err != nil {
+            log.Printf("Failed to save notification: %v", err)
+        }
+        
     } else {
         // Payment failed or cancelled
         log.Printf("M-PESA payment failed or cancelled: %+v", stkCallback)
@@ -240,10 +369,23 @@ func MpesaCallback(c *gin.Context) {
             return
         }
 
+        // Send push notification and save notification
         if user.PushToken != "" {
             sendPushNotification(user.PushToken, "Payment Failed", "Your M-PESA payment failed or was cancelled.")
         } else {
             log.Printf("User does not have a push token")
+        }
+
+        // Save notification to database
+        notification := models.Notification{
+            UserID: user.ID,
+            Title:  "Payment Failed",
+            Body:   "Your M-PESA payment failed or was cancelled.",
+            Data:   "",
+        }
+
+        if err := utils.CustomerPortalDB.Create(&notification).Error; err != nil {
+            log.Printf("Failed to save notification: %v", err)
         }
     }
 
