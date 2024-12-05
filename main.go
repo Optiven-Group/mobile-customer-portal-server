@@ -70,6 +70,7 @@ func main() {
         protected.GET("/properties/:lead_file_no/transactions", properties.GetTransactions)
         protected.GET("/properties/:lead_file_no/title-status", properties.GetTitleStatus)
         protected.GET("/projects", properties.GetUserProjects)
+        protected.GET("/visible-projects", properties.GetAllVisibleProjects)
         protected.GET("/projects/:project_id/properties", properties.GetUserPropertiesByProject)
         protected.GET("/properties/:lead_file_no/receipts", properties.GetReceiptsByProperty)
         protected.POST("/save-push-token", auth.SavePushToken)

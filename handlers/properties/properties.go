@@ -525,6 +525,28 @@ func GetFeaturedProjects(c *gin.Context) {
     })
 }
 
+func GetAllVisibleProjects(c *gin.Context) {
+    var featuredProjects []models.Project
+    var otherProjects []models.Project
+
+    // Fetch featured projects with visibility = 'SHOW', order by name
+    if err := utils.DefaultDB.Where("is_featured = ? AND visibility = ?", true, "SHOW").Order("name ASC").Find(&featuredProjects).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch featured projects"})
+        return
+    }
+
+    // Fetch other projects (not featured) with visibility = 'SHOW', order by name
+    if err := utils.DefaultDB.Where("is_featured = ? AND visibility = ?", false, "SHOW").Order("name ASC").Find(&otherProjects).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch other projects"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "featured_projects": featuredProjects,
+        "other_projects":    otherProjects,
+    })
+}
+
 func GetTitleStatus(c *gin.Context) {
     // Get the user from the context
     userInterface, exists := c.Get("user")
