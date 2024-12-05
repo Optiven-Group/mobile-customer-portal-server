@@ -11,4 +11,5 @@ type Campaign struct {
 	Year           int       `json:"year"`
 	Featured       bool      `json:"featured"`
 	CreatedAt      time.Time `json:"created_at"`
+	Link           string    `json:"link"`
 }
