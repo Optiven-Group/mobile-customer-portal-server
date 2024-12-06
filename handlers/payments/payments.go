@@ -277,13 +277,7 @@ func MpesaCallback(c *gin.Context) {
             log.Printf("Failed to update M-PESA payment status: %v", err)
         }
     
-        isID := getInstallmentScheduleIDByCheckoutRequestID(checkoutRequestID)
-        if isID == "" {
-            log.Printf("Could not find InstallmentScheduleID for CheckoutRequestID: %s", checkoutRequestID)
-            return
-        }
-    
-        // Retrieve the mpesaPayment record to know how much was paid
+        // Get the M-Pesa payment record
         var mpesaPayment models.MpesaPayment
         if err := utils.CustomerPortalDB.
             Where("checkout_request_id = ?", checkoutRequestID).
@@ -292,49 +286,7 @@ func MpesaCallback(c *gin.Context) {
             return
         }
     
-        // Fetch the installment schedule
-        var schedule models.InstallmentSchedule
-        if err := utils.CRMDB.Where("IS_id = ?", isID).First(&schedule).Error; err != nil {
-            log.Printf("Failed to fetch installment schedule: %v", err)
-            return
-        }
-    
-        // Parse amounts
-        installmentAmount, _ := strconv.ParseFloat(strings.ReplaceAll(schedule.InstallmentAmount, ",", ""), 64)
-        currentAmountPaid, _ := strconv.ParseFloat(strings.ReplaceAll(schedule.AmountPaid, ",", ""), 64)
-        paymentAmount, _ := strconv.ParseFloat(strings.ReplaceAll(mpesaPayment.Amount, ",", ""), 64)
-    
-        newAmountPaid := currentAmountPaid + paymentAmount
-        remainingAmount := installmentAmount - newAmountPaid
-    
-        // Determine if fully paid or not
-        paidStatus := "No"
-        if remainingAmount <= 0 {
-            // Fully paid
-            remainingAmount = 0
-            paidStatus = "Yes"
-        }
-    
-        // Update the installment schedule
-        updates := map[string]interface{}{
-            "amount_paid":      fmt.Sprintf("%.2f", newAmountPaid),
-            "remaining_amount": fmt.Sprintf("%.2f", remainingAmount),
-            "paid":             paidStatus,
-        }
-    
-        if err := utils.CRMDB.Model(&models.InstallmentSchedule{}).
-            Where("IS_id = ?", isID).
-            Updates(updates).Error; err != nil {
-            log.Printf("Failed to update installment schedule: %v", err)
-        } else {
-            if paidStatus == "Yes" {
-                log.Printf("Installment schedule ISID=%s fully paid", isID)
-            } else {
-                log.Printf("Installment schedule ISID=%s updated but still not fully paid", isID)
-            }
-        }
-    
-        // Notify the user
+        // Fetch the user
         customerNumber := mpesaPayment.CustomerNumber
         var user models.User
         if err := utils.CustomerPortalDB.
@@ -344,19 +296,13 @@ func MpesaCallback(c *gin.Context) {
             return
         }
     
-        var message string
-        if paidStatus == "Yes" {
-            // Full payment message
-            message = fmt.Sprintf("Your payment of KES %s for plot %s was successful and your installment is now fully settled. Thank you!",
-                mpesaPayment.Amount, mpesaPayment.PlotNumber)
-        } else {
-            // Partial payment message
-            message = fmt.Sprintf("We’ve received your payment of KES %s for plot %s. Your remaining balance is KES %.2f. Keep going!",
-                mpesaPayment.Amount, mpesaPayment.PlotNumber, remainingAmount)
-        }
+        // Since we are not modifying the installment schedule table at this point,
+        // just notify the user that the payment has been received and is being processed.
+        message := fmt.Sprintf("We've received your payment of KES %s for plot %s. Your payment is currently being processed.",
+            mpesaPayment.Amount, mpesaPayment.PlotNumber)
     
         if user.PushToken != "" {
-            sendPushNotification(user.PushToken, "Payment Update", message)
+            sendPushNotification(user.PushToken, "Payment Received", message)
         } else {
             log.Printf("User does not have a push token")
         }
@@ -364,7 +310,7 @@ func MpesaCallback(c *gin.Context) {
         // Save notification
         notification := models.Notification{
             UserID: user.ID,
-            Title:  "Payment Update",
+            Title:  "Payment Received",
             Body:   message,
             Data:   "",
         }
@@ -429,18 +375,6 @@ func MpesaCallback(c *gin.Context) {
 
     // Return 200 OK
     c.JSON(http.StatusOK, gin.H{"message": "Callback received"})
-}
-
-// getInstallmentScheduleIDByCheckoutRequestID retrieves the InstallmentScheduleID using the CheckoutRequestID.
-func getInstallmentScheduleIDByCheckoutRequestID(checkoutRequestID string) string {
-    var mpesaPayment models.MpesaPayment
-    if err := utils.CustomerPortalDB.
-        Where("checkout_request_id = ?", checkoutRequestID).
-        First(&mpesaPayment).Error; err != nil {
-        log.Printf("Error finding M-PESA payment: %v", err)
-        return ""
-    }
-    return mpesaPayment.InstallmentScheduleID
 }
 
 // sendPushNotification sends a push notification to the user.
