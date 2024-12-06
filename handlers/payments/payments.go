@@ -1,22 +1,22 @@
 package payments
 
 import (
-    "bytes"
-    "encoding/base64"
-    "encoding/json"
-    "fmt"
-    "io/ioutil"
-    "log"
-    "mobile-customer-portal-server/models"
-    "mobile-customer-portal-server/utils"
-    "net/http"
-    "os"
-    "strconv"
-    "strings"
-    "time"
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"mobile-customer-portal-server/models"
+	"mobile-customer-portal-server/utils"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    mpesa "github.com/jwambugu/mpesa-golang-sdk"
+	"github.com/gin-gonic/gin"
+	mpesa "github.com/jwambugu/mpesa-golang-sdk"
 )
 
 
@@ -73,7 +73,7 @@ func getAccessToken(consumerKey, consumerSecret string) (string, error) {
     }
     defer resp.Body.Close()
 
-    bodyBytes, err := ioutil.ReadAll(resp.Body)
+    bodyBytes, err := io.ReadAll(resp.Body)
     if err != nil {
         return "", err
     }
@@ -190,7 +190,7 @@ func InitiateMpesaPayment(c *gin.Context) {
     }
     defer resp.Body.Close()
 
-    responseBody, err := ioutil.ReadAll(resp.Body)
+    responseBody, err := io.ReadAll(resp.Body)
     if err != nil {
         log.Printf("Error reading response body: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate M-PESA payment"})
@@ -248,7 +248,7 @@ func MpesaCallback(c *gin.Context) {
     var callback mpesa.STKPushCallback
 
     // Read the request body
-    bodyBytes, err := ioutil.ReadAll(c.Request.Body)
+    bodyBytes, err := io.ReadAll(c.Request.Body)
     if err != nil {
         log.Printf("Error reading callback body: %v", err)
         c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid callback data"})
@@ -267,38 +267,23 @@ func MpesaCallback(c *gin.Context) {
     if stkCallback.ResultCode == 0 {
         // Payment successful
         log.Printf("M-PESA payment successful: %+v", stkCallback)
-
-        // Extract necessary details
+    
         checkoutRequestID := stkCallback.CheckoutRequestID
-
-        // Update the payment status
+    
+        // Update the M-Pesa payment status to Success
         if err := utils.CustomerPortalDB.Model(&models.MpesaPayment{}).
             Where("checkout_request_id = ?", checkoutRequestID).
-            Updates(map[string]interface{}{
-                "status": "Success",
-            }).Error; err != nil {
+            Updates(map[string]interface{}{"status": "Success"}).Error; err != nil {
             log.Printf("Failed to update M-PESA payment status: %v", err)
         }
-
+    
         isID := getInstallmentScheduleIDByCheckoutRequestID(checkoutRequestID)
-
         if isID == "" {
             log.Printf("Could not find InstallmentScheduleID for CheckoutRequestID: %s", checkoutRequestID)
             return
         }
-
-        // Update the installment schedule
-        if err := utils.CRMDB.Model(&models.InstallmentSchedule{}).
-            Where("IS_id = ?", isID).
-            Updates(map[string]interface{}{
-                "paid": "Yes",
-            }).Error; err != nil {
-            log.Printf("Failed to update installment schedule: %v", err)
-        } else {
-            log.Printf("Successfully updated installment schedule ISID=%s to paid", isID)
-        }
-
-        // Fetch the user's push token
+    
+        // Retrieve the mpesaPayment record to know how much was paid
         var mpesaPayment models.MpesaPayment
         if err := utils.CustomerPortalDB.
             Where("checkout_request_id = ?", checkoutRequestID).
@@ -306,8 +291,51 @@ func MpesaCallback(c *gin.Context) {
             log.Printf("Error finding M-PESA payment: %v", err)
             return
         }
+    
+        // Fetch the installment schedule
+        var schedule models.InstallmentSchedule
+        if err := utils.CRMDB.Where("IS_id = ?", isID).First(&schedule).Error; err != nil {
+            log.Printf("Failed to fetch installment schedule: %v", err)
+            return
+        }
+    
+        // Parse amounts
+        installmentAmount, _ := strconv.ParseFloat(strings.ReplaceAll(schedule.InstallmentAmount, ",", ""), 64)
+        currentAmountPaid, _ := strconv.ParseFloat(strings.ReplaceAll(schedule.AmountPaid, ",", ""), 64)
+        paymentAmount, _ := strconv.ParseFloat(strings.ReplaceAll(mpesaPayment.Amount, ",", ""), 64)
+    
+        newAmountPaid := currentAmountPaid + paymentAmount
+        remainingAmount := installmentAmount - newAmountPaid
+    
+        // Determine if fully paid or not
+        paidStatus := "No"
+        if remainingAmount <= 0 {
+            // Fully paid
+            remainingAmount = 0
+            paidStatus = "Yes"
+        }
+    
+        // Update the installment schedule
+        updates := map[string]interface{}{
+            "amount_paid":      fmt.Sprintf("%.2f", newAmountPaid),
+            "remaining_amount": fmt.Sprintf("%.2f", remainingAmount),
+            "paid":             paidStatus,
+        }
+    
+        if err := utils.CRMDB.Model(&models.InstallmentSchedule{}).
+            Where("IS_id = ?", isID).
+            Updates(updates).Error; err != nil {
+            log.Printf("Failed to update installment schedule: %v", err)
+        } else {
+            if paidStatus == "Yes" {
+                log.Printf("Installment schedule ISID=%s fully paid", isID)
+            } else {
+                log.Printf("Installment schedule ISID=%s updated but still not fully paid", isID)
+            }
+        }
+    
+        // Notify the user
         customerNumber := mpesaPayment.CustomerNumber
-
         var user models.User
         if err := utils.CustomerPortalDB.
             Where("customer_number = ?", customerNumber).
@@ -315,26 +343,36 @@ func MpesaCallback(c *gin.Context) {
             log.Printf("Failed to find user: %v", err)
             return
         }
-
-        // Send push notification and save notification
+    
+        var message string
+        if paidStatus == "Yes" {
+            // Full payment message
+            message = fmt.Sprintf("Your payment of KES %s for plot %s was successful and your installment is now fully settled. Thank you!",
+                mpesaPayment.Amount, mpesaPayment.PlotNumber)
+        } else {
+            // Partial payment message
+            message = fmt.Sprintf("We’ve received your payment of KES %s for plot %s. Your remaining balance is KES %.2f. Keep going!",
+                mpesaPayment.Amount, mpesaPayment.PlotNumber, remainingAmount)
+        }
+    
         if user.PushToken != "" {
-            sendPushNotification(user.PushToken, "Payment Successful", fmt.Sprintf("Your payment of KES %s for plot %s was successful.", mpesaPayment.Amount, mpesaPayment.PlotNumber))
+            sendPushNotification(user.PushToken, "Payment Update", message)
         } else {
             log.Printf("User does not have a push token")
         }
-
-        // Save notification to database
+    
+        // Save notification
         notification := models.Notification{
             UserID: user.ID,
-            Title:  "Payment Successful",
-            Body:   fmt.Sprintf("Your payment of KES %s for plot %s was successful.", mpesaPayment.Amount, mpesaPayment.PlotNumber),
+            Title:  "Payment Update",
+            Body:   message,
             Data:   "",
         }
-
+    
         if err := utils.CustomerPortalDB.Create(&notification).Error; err != nil {
             log.Printf("Failed to save notification: %v", err)
         }
-        
+    
     } else {
         // Payment failed or cancelled
         log.Printf("M-PESA payment failed or cancelled: %+v", stkCallback)
@@ -428,7 +466,7 @@ func sendPushNotification(pushToken, title, message string) {
     defer resp.Body.Close()
 
     if resp.StatusCode != http.StatusOK {
-        bodyBytes, _ := ioutil.ReadAll(resp.Body)
+        bodyBytes, _ := io.ReadAll(resp.Body)
         log.Printf("Failed to send push notification, status: %d, response: %s", resp.StatusCode, string(bodyBytes))
     } else {
         log.Printf("Push notification sent successfully to %s", pushToken)
