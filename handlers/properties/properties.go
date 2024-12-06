@@ -314,8 +314,8 @@ func GetTransactions(c *gin.Context) {
                 parsedTime, err = time.Parse("2006-01-02 15:04:05", receipt.PaymentDate1)
                 if err != nil {
                     // If still error, use the raw string
-                    dateStr = receipt.PaymentDate1
-                    timeStr = ""
+                    dateStr = time.Now().Format("2006-01-02")
+                    timeStr = "00:00"
                 } else {
                     dateStr = parsedTime.Format("2006-01-02")
                     timeStr = parsedTime.Format("15:04")

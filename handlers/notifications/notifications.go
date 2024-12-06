@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
@@ -95,18 +96,39 @@ func SendNotification(c *gin.Context) {
 func GetNotifications(c *gin.Context) {
 	userInterface, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
-		return
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+			return
 	}
 	user := userInterface.(models.User)
 
+	pageStr := c.Query("page")
+	limitStr := c.Query("limit")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+			page = 1
+	}
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+			limit = 20
+	}
+
+	offset := (page - 1) * limit
+
 	var notifications []models.Notification
-	if err := utils.CustomerPortalDB.Where("user_id = ?", user.ID).Order("created_at desc").Find(&notifications).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
-		return
+	if err := utils.CustomerPortalDB.
+			Where("user_id = ?", user.ID).
+			Order("created_at DESC").
+			Offset(offset).
+			Limit(limit).
+			Find(&notifications).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
+			return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"notifications": notifications,
+			"notifications": notifications,
 	})
 }
+
