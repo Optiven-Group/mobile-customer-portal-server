@@ -5,6 +5,7 @@ import (
 	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -20,6 +21,10 @@ func Login(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data. Please provide a valid email and password."})
         return
     }
+
+    // Trim spaces on server-side
+    input.Email = strings.TrimSpace(input.Email)
+    input.Password = strings.TrimSpace(input.Password)
 
     var user models.User
     if err := utils.CustomerPortalDB.Where("email = ?", input.Email).First(&user).Error; err != nil {
@@ -48,34 +53,17 @@ func Login(c *gin.Context) {
         return
     }
 
-    // Generate tokens
+    // Generate a non-expiring access token
     accessToken, err := utils.GenerateAccessToken(user.ID)
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate access token"})
         return
     }
 
-    refreshToken, err := utils.GenerateRefreshToken()
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate refresh token"})
-        return
-    }
-
-    // Hash the refresh token using SHA256
-    hashedRefreshToken := utils.HashToken(refreshToken)
-
-    // Save the hashed refresh token in the database
-    user.RefreshToken = hashedRefreshToken
-    if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save refresh token"})
-        return
-    }
-
-    // Return the tokens and user data in the response
+    // Return only the access token and user data, no refresh token
     c.JSON(http.StatusOK, gin.H{
-        "message":       "Login successful.",
-        "access_token":  accessToken,
-        "refresh_token": refreshToken,
+        "message":      "Login successful.",
+        "access_token": accessToken,
         "user": gin.H{
             "id":             user.ID,
             "email":          user.Email,

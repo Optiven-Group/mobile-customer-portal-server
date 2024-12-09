@@ -5,6 +5,7 @@ import (
 	"mobile-customer-portal-server/utils"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
@@ -34,12 +35,7 @@ func AuthMiddleware() gin.HandlerFunc {
         })
 
         if err != nil {
-            ve, ok := err.(*jwt.ValidationError)
-            if ok && ve.Errors&(jwt.ValidationErrorExpired) != 0 {
-                c.JSON(http.StatusUnauthorized, gin.H{"error": "Access token expired"})
-            } else {
-                c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-            }
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
             c.Abort()
             return
         }
@@ -50,7 +46,7 @@ func AuthMiddleware() gin.HandlerFunc {
             return
         }
 
-        // Get the user ID from the token claims
+        // Get the user ID and iat from the token claims
         claims, ok := token.Claims.(jwt.MapClaims)
         if !ok {
             c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
@@ -65,12 +61,27 @@ func AuthMiddleware() gin.HandlerFunc {
             return
         }
 
+        iatFloat, iatExists := claims["iat"].(float64)
+        if !iatExists {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Token missing issued-at (iat) field"})
+            c.Abort()
+            return
+        }
+
         userID := uint(userIDFloat)
+        iatTime := time.Unix(int64(iatFloat), 0)
 
         // Fetch the user from the database
         var user models.User
         if err := utils.CustomerPortalDB.First(&user, userID).Error; err != nil {
             c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+            c.Abort()
+            return
+        }
+
+        // Check if the token was issued before the user's last logout
+        if user.LastLogoutAt != nil && user.LastLogoutAt.After(iatTime) {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Token invalidated by logout"})
             c.Abort()
             return
         }
@@ -81,4 +92,3 @@ func AuthMiddleware() gin.HandlerFunc {
         c.Next()
     }
 }
-

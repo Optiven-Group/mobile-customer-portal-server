@@ -1,9 +1,6 @@
 package utils
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"log"
 	"os"
 	"time"
@@ -17,7 +14,6 @@ var JwtSecret []byte
 func init() {
     // Load the .env file
     if err := godotenv.Load(); err != nil {
-        // It's okay if the .env file isn't found; environment variables may be set elsewhere
         log.Println("No .env file found or error loading .env file:", err)
     }
 
@@ -29,27 +25,14 @@ func init() {
     JwtSecret = []byte(secret)
 }
 
-// GenerateAccessToken creates a new JWT access token
+// GenerateAccessToken creates a new JWT access token without expiration.
 func GenerateAccessToken(userID uint) (string, error) {
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+    claims := jwt.MapClaims{
         "user_id": userID,
-        "exp":     time.Now().Add(15 * time.Minute).Unix(), // Access token valid for 15 minutes
-    })
-
-    return token.SignedString(JwtSecret)
-}
-
-// GenerateRefreshToken creates a new random refresh token
-func GenerateRefreshToken() (string, error) {
-    bytes := make([]byte, 32) // 256 bits
-    if _, err := rand.Read(bytes); err != nil {
-        return "", err
+        // No 'exp' claim, making it non-expiring by default.
+        "iat": time.Now().Unix(),
     }
-    return hex.EncodeToString(bytes), nil
-}
 
-// HashToken hashes a token using SHA256
-func HashToken(token string) string {
-    hash := sha256.Sum256([]byte(token))
-    return hex.EncodeToString(hash[:])
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(JwtSecret)
 }

@@ -14,19 +14,19 @@ const otpValidityDuration = 10 * time.Minute
 
 // generateOTP generates a 6-digit OTP
 func generateOTP() string {
-    source := rand.NewSource(time.Now().UnixNano())
-    r := rand.New(source)
-    const digits = "0123456789"
-    otp := make([]byte, 6)
-    for i := range otp {
-        otp[i] = digits[r.Intn(len(digits))]
-    }
-    return string(otp)
+	source := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(source)
+	const digits = "0123456789"
+	otp := make([]byte, 6)
+	for i := range otp {
+		otp[i] = digits[r.Intn(len(digits))]
+	}
+	return string(otp)
 }
 
 // sendOTP sends the OTP via email
 func sendOTP(email, otp string) {
-    utils.SendOTPEmail(email, otp)
+	utils.SendOTPEmail(email, otp)
 }
 
 func SavePushToken(c *gin.Context) {

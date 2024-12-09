@@ -4,6 +4,7 @@ import (
 	"mobile-customer-portal-server/models"
 	"mobile-customer-portal-server/utils"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,14 +17,13 @@ func Logout(c *gin.Context) {
     }
     user := userInterface.(models.User)
 
-    // Remove the refresh token from the database
-    user.RefreshToken = ""
+    now := time.Now()
+    user.LastLogoutAt = &now
+
     if err := utils.CustomerPortalDB.Save(&user).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to log out"})
         return
     }
 
-    c.JSON(http.StatusOK, gin.H{
-        "message": "Logout successful.",
-    })
+    c.JSON(http.StatusOK, gin.H{"message": "Logout successful."})
 }
