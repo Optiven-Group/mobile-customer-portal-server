@@ -61,9 +61,21 @@ func Login(c *gin.Context) {
     }
 
     // Return only the access token and user data, no refresh token
+    // c.JSON(http.StatusOK, gin.H{
+    //     "message":      "Login successful.",
+    //     "access_token": accessToken,
+    //     "user": gin.H{
+    //         "id":             user.ID,
+    //         "email":          user.Email,
+    //         "name":           customer.CustomerName,
+    //         "customerNumber": user.CustomerNumber,
+    //         "leadFiles":      leadFiles,
+    //     },
+    // })
     c.JSON(http.StatusOK, gin.H{
         "message":      "Login successful.",
         "access_token": accessToken,
+        "token":        accessToken, // For old clients
         "user": gin.H{
             "id":             user.ID,
             "email":          user.Email,
@@ -71,5 +83,13 @@ func Login(c *gin.Context) {
             "customerNumber": user.CustomerNumber,
             "leadFiles":      leadFiles,
         },
+        "userData": gin.H{ // For old clients
+            "id":             user.ID,
+            "email":          user.Email,
+            "name":           customer.CustomerName,
+            "customerNumber": user.CustomerNumber,
+            "leadFiles":      leadFiles,
+        },
+        "refresh_token": "", // For backward compatibility
     })
 }
